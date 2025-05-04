@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { 
@@ -355,24 +354,38 @@ const Dashboard = () => {
     }));
     
     // Save notes to database
-    supabase
-      .from('csv_datasets')
-      .upsert({
-        name: datasets[datasetKey].name,
-        type: `${datasetKey}_standards`,
-        notes
-      }, {
-        onConflict: 'type'
-      })
-      .then(() => {
-        toast({
-          title: "Notes saved",
-          description: `Notes for ${datasets[datasetKey].name} have been updated.`,
+    try {
+      supabase
+        .from('csv_datasets')
+        .upsert({
+          name: datasets[datasetKey].name,
+          type: `${datasetKey}_standards`,
+          notes
+        }, {
+          onConflict: 'type'
+        })
+        .then(() => {
+          toast({
+            title: "Notes saved",
+            description: `Notes for ${datasets[datasetKey].name} have been updated.`,
+          });
+        })
+        .catch(error => {
+          console.error('Error saving notes:', error);
+          toast({
+            title: "Error saving notes",
+            description: "Failed to save notes. Please try again.",
+            variant: "destructive"
+          });
         });
-      })
-      .catch(error => {
-        console.error('Error saving notes:', error);
+    } catch (error) {
+      console.error('Error in notes update process:', error);
+      toast({
+        title: "Error saving notes",
+        description: "Failed to save notes. Please try again.",
+        variant: "destructive"
       });
+    }
   };
   
   // Handle adding a new row
