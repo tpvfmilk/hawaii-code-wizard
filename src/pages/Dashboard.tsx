@@ -1,978 +1,711 @@
 
-import React, { useState, useEffect } from "react";
-import { useToast } from "@/hooks/use-toast";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
-import { parseCSV, checkRequiredColumns } from "@/utils/CSVHelper";
-import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Upload, Search, Download, PlusCircle, Save, FileUp, AlertTriangle, Info } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
+import { 
+  Card, 
+  CardContent, 
+  CardHeader, 
+  CardTitle, 
+  CardDescription 
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "@/components/ui/table";
+import { 
+  ArrowLeft, 
+  Upload, 
+  Download, 
+  Plus, 
+  Search, 
+  FileDown, 
+  AlertCircle, 
+  CheckCircle2, 
+  X
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { parseCSV } from "@/utils/CSVHelper";
+import { supabase } from "@/integrations/supabase/client";
 
-// Define required columns for each dataset type
-const requiredColumns = {
-  zoning: ["County", "Zoning District", "Front Setback", "Side Setback", "Rear Setback", "Max FAR", "Max Height", "Max Lot Coverage"],
-  parking: ["County", "Use Type", "Parking Requirement"],
-  ada: ["Total Parking Spaces Provided", "Minimum Required ADA Stalls"]
-};
+interface DatasetInfo {
+  name: string;
+  type: string;
+  status: "missing" | "loaded" | "uploading";
+  lastUpdated: string | null;
+  notes: string;
+  data: any[] | null;
+}
 
-const datasetTypes = [
-  { id: "zoning", name: "Zoning Standards", fileName: "Zoning_Standards.csv" },
-  { id: "parking", name: "Parking Requirements", fileName: "Parking_Requirements.csv" },
-  { id: "ada", name: "ADA Requirements", fileName: "ADA_Stall_Requirements.csv" }
-];
+interface ColumnConfig {
+  header: string;
+  accessorKey: string;
+  cell?: (info: any) => React.ReactNode;
+}
 
 const Dashboard = () => {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("upload");
-  const [uploading, setUploading] = useState(false);
-  const [datasets, setDatasets] = useState<{[key: string]: any}>({});
-  const [datasetMeta, setDatasetMeta] = useState<{[key: string]: {lastUpdated: string, notes: string}}>({});
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterColumn, setFilterColumn] = useState("");
-  const [editingCell, setEditingCell] = useState<{rowIndex: number, columnName: string} | null>(null);
-  const [editValue, setEditValue] = useState("");
-  const [missingDatasets, setMissingDatasets] = useState<string[]>([]);
   
-  // Fetch datasets from Supabase on component mount
+  // Datasets state
+  const [datasets, setDatasets] = useState<Record<string, DatasetInfo>>({
+    zoning: {
+      name: "Zoning Standards",
+      type: "zoning_standards",
+      status: "missing",
+      lastUpdated: null,
+      notes: "",
+      data: null
+    },
+    parking: {
+      name: "Parking Requirements",
+      type: "parking_requirements",
+      status: "missing",
+      lastUpdated: null,
+      notes: "",
+      data: null
+    },
+    ada: {
+      name: "ADA Stall Requirements",
+      type: "ada_requirements",
+      status: "missing",
+      lastUpdated: null,
+      notes: "",
+      data: null
+    }
+  });
+  
+  // Active tab state
+  const [activeTab, setActiveTab] = useState("zoning");
+  
+  // Input refs for file uploads
+  const zoningInputRef = useRef<HTMLInputElement>(null);
+  const parkingInputRef = useRef<HTMLInputElement>(null);
+  const adaInputRef = useRef<HTMLInputElement>(null);
+  
+  // Search filters
+  const [filters, setFilters] = useState<Record<string, string>>({
+    zoning: "",
+    parking: "",
+    ada: ""
+  });
+  
+  // Fetch datasets on component mount
   useEffect(() => {
     fetchDatasets();
   }, []);
   
-  // Fetch datasets from Supabase
+  // Column configurations for each dataset
+  const columnConfigs: Record<string, ColumnConfig[]> = {
+    zoning: [
+      { header: "County", accessorKey: "county" },
+      { header: "Zoning District", accessorKey: "zoning_district" },
+      { header: "Front Setback", accessorKey: "front_setback" },
+      { header: "Side Setback", accessorKey: "side_setback" },
+      { header: "Rear Setback", accessorKey: "rear_setback" },
+      { header: "Max FAR", accessorKey: "max_far" },
+      { header: "Max Height", accessorKey: "max_height" },
+      { header: "Max Lot Coverage", accessorKey: "max_lot_coverage" },
+      { header: "Parking Required", accessorKey: "parking_required" },
+      { header: "ADA Stalls Required", accessorKey: "ada_stalls_required" }
+    ],
+    parking: [
+      { header: "County", accessorKey: "county" },
+      { header: "Use Type", accessorKey: "use_type" },
+      { header: "Parking Requirement", accessorKey: "parking_requirement" }
+    ],
+    ada: [
+      { header: "Total Parking Spaces", accessorKey: "total_parking_spaces_provided" },
+      { header: "Minimum Required ADA Stalls", accessorKey: "minimum_required_ada_stalls" }
+    ]
+  };
+  
+  // Function to fetch all datasets from Supabase
   const fetchDatasets = async () => {
     try {
-      // Fetch dataset metadata
-      const { data: metaData, error: metaError } = await supabase
+      // Fetch metadata about uploaded CSV files
+      const { data: metaData } = await supabase
         .from('csv_datasets')
         .select('*');
         
-      if (metaError) throw metaError;
-      
-      // Check for missing datasets
-      const missing: string[] = [];
-      const meta: {[key: string]: {lastUpdated: string, notes: string}} = {};
-      const data: {[key: string]: any} = {};
-      
       if (metaData) {
-        datasetTypes.forEach(type => {
-          const dataset = metaData.find(d => d.type === type.id);
-          if (!dataset) {
-            missing.push(type.fileName);
-          } else {
-            meta[type.id] = {
-              lastUpdated: new Date(dataset.last_updated).toLocaleString(),
-              notes: dataset.notes || ""
+        // Create a temporary copy of the datasets state
+        const updatedDatasets = { ...datasets };
+        
+        // Update dataset metadata from database records
+        metaData.forEach((record) => {
+          const datasetKey = record.type.includes('zoning') 
+            ? 'zoning' 
+            : record.type.includes('parking') 
+              ? 'parking' 
+              : 'ada';
+              
+          if (updatedDatasets[datasetKey]) {
+            updatedDatasets[datasetKey] = {
+              ...updatedDatasets[datasetKey],
+              status: 'loaded',
+              lastUpdated: record.last_updated,
+              notes: record.notes || ''
             };
-            data[type.id] = dataset.content;
           }
         });
-      } else {
-        datasetTypes.forEach(type => missing.push(type.fileName));
+        
+        // Fetch actual data for each dataset
+        for (const key of Object.keys(updatedDatasets)) {
+          const tableMap: Record<string, string> = {
+            zoning: 'zoning_standards',
+            parking: 'parking_requirements',
+            ada: 'ada_requirements'
+          };
+          
+          const { data } = await supabase
+            .from(tableMap[key])
+            .select('*');
+            
+          if (data && data.length > 0) {
+            updatedDatasets[key].data = data;
+            updatedDatasets[key].status = 'loaded';
+          }
+        }
+        
+        // Update state with fetched data
+        setDatasets(updatedDatasets);
       }
-      
-      setMissingDatasets(missing);
-      setDatasetMeta(meta);
-      setDatasets(data);
-      
-      // Fetch actual data tables
-      await Promise.all([
-        fetchZoningData(),
-        fetchParkingData(),
-        fetchADAData()
-      ]);
-      
     } catch (error) {
-      console.error("Error fetching datasets:", error);
+      console.error('Error fetching datasets:', error);
       toast({
-        title: "Error fetching datasets",
-        description: "There was an error loading your data. Please try again.",
+        title: "Error loading data",
+        description: "Could not fetch datasets from the database.",
         variant: "destructive"
       });
     }
   };
   
-  const fetchZoningData = async () => {
-    const { data, error } = await supabase
-      .from('zoning_standards')
-      .select('*');
-      
-    if (error) {
-      console.error("Error fetching zoning data:", error);
-    } else if (data && data.length > 0) {
-      setDatasets(prev => ({
-        ...prev,
-        zoning: data
-      }));
-    }
-  };
-  
-  const fetchParkingData = async () => {
-    const { data, error } = await supabase
-      .from('parking_requirements')
-      .select('*');
-      
-    if (error) {
-      console.error("Error fetching parking data:", error);
-    } else if (data && data.length > 0) {
-      setDatasets(prev => ({
-        ...prev,
-        parking: data
-      }));
-    }
-  };
-  
-  const fetchADAData = async () => {
-    const { data, error } = await supabase
-      .from('ada_requirements')
-      .select('*');
-      
-    if (error) {
-      console.error("Error fetching ADA data:", error);
-    } else if (data && data.length > 0) {
-      setDatasets(prev => ({
-        ...prev,
-        ada: data
-      }));
-    }
-  };
-
-  // Handle file upload
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, datasetType: string) => {
-    const file = e.target.files?.[0];
+  // Function to handle file upload
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, datasetKey: string) => {
+    const file = event.target.files?.[0];
     if (!file) return;
     
-    setUploading(true);
-    
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const csvData = parseCSV(event.target?.result as string);
-        
-        // Check if CSV has required columns
-        const requiredCols = requiredColumns[datasetType as keyof typeof requiredColumns];
-        if (!checkRequiredColumns(csvData, requiredCols)) {
-          toast({
-            title: "Invalid CSV format",
-            description: `CSV is missing required columns: ${requiredCols.join(", ")}`,
-            variant: "destructive"
-          });
-          setUploading(false);
-          return;
+    try {
+      // Update status to uploading
+      setDatasets(prev => ({
+        ...prev,
+        [datasetKey]: {
+          ...prev[datasetKey],
+          status: 'uploading'
         }
-        
-        // Save to Supabase
-        await saveDataset(datasetType, csvData);
-        
-        // Update state
-        setDatasets(prev => ({
-          ...prev,
-          [datasetType]: csvData
-        }));
-        
-        setDatasetMeta(prev => ({
-          ...prev,
-          [datasetType]: {
-            lastUpdated: new Date().toLocaleString(),
-            notes: prev[datasetType]?.notes || ""
-          }
-        }));
-        
-        // Remove from missing datasets if it was there
-        const typeInfo = datasetTypes.find(t => t.id === datasetType);
-        if (typeInfo && missingDatasets.includes(typeInfo.fileName)) {
-          setMissingDatasets(prev => prev.filter(name => name !== typeInfo.fileName));
-        }
-        
-        toast({
-          title: "Upload successful",
-          description: `${file.name} has been successfully uploaded.`
-        });
-        
-        // Switch to the dataset tab
-        setActiveTab(datasetType);
-      } catch (error) {
-        console.error("Error processing CSV:", error);
-        toast({
-          title: "Error processing CSV",
-          description: "There was an error processing your CSV file. Please check the format.",
-          variant: "destructive"
-        });
+      }));
+      
+      // Parse CSV file
+      const fileContent = await file.text();
+      const parsedData = parseCSV(fileContent);
+      
+      if (!parsedData || parsedData.length === 0) {
+        throw new Error('Invalid CSV format or empty file');
       }
       
-      setUploading(false);
+      // Validate required columns for each dataset type
+      validateColumns(parsedData[0], datasetKey);
+      
+      // Save to Supabase
+      await saveDataset(datasetKey, parsedData);
+      
+      // Update local state
+      setDatasets(prev => ({
+        ...prev,
+        [datasetKey]: {
+          ...prev[datasetKey],
+          status: 'loaded',
+          lastUpdated: new Date().toISOString(),
+          data: parsedData
+        }
+      }));
+      
+      toast({
+        title: "Upload successful",
+        description: `${datasets[datasetKey].name} data has been updated.`,
+      });
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      
+      // Reset status and show error
+      setDatasets(prev => ({
+        ...prev,
+        [datasetKey]: {
+          ...prev[datasetKey],
+          status: prev[datasetKey].data ? 'loaded' : 'missing'
+        }
+      }));
+      
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "Failed to process the CSV file.",
+        variant: "destructive"
+      });
+    } finally {
+      // Reset file input
+      if (datasetKey === 'zoning' && zoningInputRef.current) {
+        zoningInputRef.current.value = '';
+      } else if (datasetKey === 'parking' && parkingInputRef.current) {
+        parkingInputRef.current.value = '';
+      } else if (datasetKey === 'ada' && adaInputRef.current) {
+        adaInputRef.current.value = '';
+      }
+    }
+  };
+  
+  // Validate required columns for each dataset
+  const validateColumns = (headers: Record<string, any>, datasetKey: string) => {
+    const requiredColumns: Record<string, string[]> = {
+      zoning: ['county', 'zoning_district', 'front_setback', 'side_setback', 'rear_setback'],
+      parking: ['county', 'use_type', 'parking_requirement'],
+      ada: ['total_parking_spaces_provided', 'minimum_required_ada_stalls']
     };
     
-    reader.readAsText(file);
+    const missingColumns = requiredColumns[datasetKey].filter(
+      col => !Object.keys(headers).some(header => 
+        header.toLowerCase().replace(/[^a-z0-9]/g, '_') === col
+      )
+    );
+    
+    if (missingColumns.length > 0) {
+      throw new Error(`Missing required columns: ${missingColumns.join(', ')}`);
+    }
   };
   
   // Save dataset to Supabase
-  const saveDataset = async (datasetType: string, data: any[]) => {
-    try {
-      // First save to csv_datasets table for tracking
-      const typeInfo = datasetTypes.find(t => t.id === datasetType);
-      if (!typeInfo) throw new Error("Invalid dataset type");
-      
-      // Check if dataset already exists
-      const { data: existingData } = await supabase
-        .from('csv_datasets')
-        .select('id')
-        .eq('type', datasetType)
-        .single();
-      
-      if (existingData) {
-        // Update existing record
-        await supabase
-          .from('csv_datasets')
-          .update({
-            content: data,
-            last_updated: new Date()
-          })
-          .eq('id', existingData.id);
-      } else {
-        // Insert new record
-        await supabase
-          .from('csv_datasets')
-          .insert({
-            name: typeInfo.fileName,
-            type: datasetType,
-            content: data
-          });
-      }
-      
-      // Then save to the specific table based on dataset type
-      if (datasetType === 'zoning') {
-        // Clear existing zoning data
-        await supabase.from('zoning_standards').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        
-        // Map data to table structure and insert
-        const zoningData = data.map(item => ({
-          county: item.County || '',
-          zoning_district: item['Zoning District'] || '',
-          front_setback: item['Front Setback'] || '',
-          side_setback: item['Side Setback'] || '',
-          rear_setback: item['Rear Setback'] || '',
-          max_far: item['Max FAR'] || '',
-          max_height: item['Max Height'] || '',
-          max_lot_coverage: item['Max Lot Coverage'] || '',
-          parking_required: item['Parking Required'] || '',
-          ada_stalls_required: item['ADA Stalls Required'] || ''
-        }));
-        
-        await supabase.from('zoning_standards').insert(zoningData);
-      } else if (datasetType === 'parking') {
-        // Clear existing parking data
-        await supabase.from('parking_requirements').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        
-        // Map data to table structure and insert
-        const parkingData = data.map(item => ({
-          county: item.County || '',
-          use_type: item['Use Type'] || '',
-          parking_requirement: item['Parking Requirement'] || ''
-        }));
-        
-        await supabase.from('parking_requirements').insert(parkingData);
-      } else if (datasetType === 'ada') {
-        // Clear existing ADA data
-        await supabase.from('ada_requirements').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        
-        // Map data to table structure and insert
-        const adaData = data.map(item => ({
-          total_parking_spaces_provided: parseInt(item['Total Parking Spaces Provided']) || 0,
-          minimum_required_ada_stalls: parseInt(item['Minimum Required ADA Stalls']) || 0
-        }));
-        
-        await supabase.from('ada_requirements').insert(adaData);
-      }
-      
-    } catch (error) {
-      console.error("Error saving dataset to Supabase:", error);
-      throw error;
-    }
-  };
-  
-  // Handle cell edit
-  const handleCellEdit = (rowIndex: number, columnName: string, currentValue: any) => {
-    setEditingCell({ rowIndex, columnName });
-    setEditValue(String(currentValue || ''));
-  };
-  
-  // Save cell edit
-  const saveCellEdit = async (datasetType: string, rowIndex: number, columnName: string) => {
-    if (editingCell) {
-      const updatedDataset = [...(datasets[datasetType] || [])];
-      updatedDataset[rowIndex] = {
-        ...updatedDataset[rowIndex],
-        [columnName]: editValue
-      };
-      
-      try {
-        // Update in Supabase
-        if (datasetType === 'zoning') {
-          const rowId = updatedDataset[rowIndex].id;
-          const fieldMap: {[key: string]: string} = {
-            'County': 'county',
-            'Zoning District': 'zoning_district',
-            'Front Setback': 'front_setback',
-            'Side Setback': 'side_setback',
-            'Rear Setback': 'rear_setback',
-            'Max FAR': 'max_far',
-            'Max Height': 'max_height',
-            'Max Lot Coverage': 'max_lot_coverage',
-            'Parking Required': 'parking_required',
-            'ADA Stalls Required': 'ada_stalls_required'
-          };
-          
-          await supabase
-            .from('zoning_standards')
-            .update({ [fieldMap[columnName]]: editValue })
-            .eq('id', rowId);
-        } else if (datasetType === 'parking') {
-          const rowId = updatedDataset[rowIndex].id;
-          const fieldMap: {[key: string]: string} = {
-            'County': 'county',
-            'Use Type': 'use_type',
-            'Parking Requirement': 'parking_requirement'
-          };
-          
-          await supabase
-            .from('parking_requirements')
-            .update({ [fieldMap[columnName]]: editValue })
-            .eq('id', rowId);
-        } else if (datasetType === 'ada') {
-          const rowId = updatedDataset[rowIndex].id;
-          const fieldMap: {[key: string]: string} = {
-            'Total Parking Spaces Provided': 'total_parking_spaces_provided',
-            'Minimum Required ADA Stalls': 'minimum_required_ada_stalls'
-          };
-          
-          await supabase
-            .from('ada_requirements')
-            .update({ [fieldMap[columnName]]: editValue })
-            .eq('id', rowId);
-        }
-        
-        // Update state
-        setDatasets(prev => ({
-          ...prev,
-          [datasetType]: updatedDataset
-        }));
-        
-        toast({
-          title: "Updated",
-          description: `Updated ${columnName} successfully.`
-        });
-      } catch (error) {
-        console.error("Error updating cell:", error);
-        toast({
-          title: "Error",
-          description: "Failed to update data. Please try again.",
-          variant: "destructive"
-        });
-      }
-      
-      setEditingCell(null);
-    }
-  };
-  
-  // Add new row
-  const addNewRow = (datasetType: string) => {
-    const newRow: any = {};
+  const saveDataset = async (datasetKey: string, data: any[]) => {
+    const tableMap: Record<string, string> = {
+      zoning: 'zoning_standards',
+      parking: 'parking_requirements',
+      ada: 'ada_requirements'
+    };
     
-    if (datasetType === 'zoning') {
-      newRow.County = '';
-      newRow['Zoning District'] = '';
-      newRow['Front Setback'] = '';
-      newRow['Side Setback'] = '';
-      newRow['Rear Setback'] = '';
-      newRow['Max FAR'] = '';
-      newRow['Max Height'] = '';
-      newRow['Max Lot Coverage'] = '';
-      newRow['Parking Required'] = '';
-      newRow['ADA Stalls Required'] = '';
-    } else if (datasetType === 'parking') {
-      newRow.County = '';
-      newRow['Use Type'] = '';
-      newRow['Parking Requirement'] = '';
-    } else if (datasetType === 'ada') {
-      newRow['Total Parking Spaces Provided'] = '';
-      newRow['Minimum Required ADA Stalls'] = '';
-    }
+    const tableName = tableMap[datasetKey];
     
+    // First, delete existing records
+    await supabase.from(tableName).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    
+    // Then insert new records
+    const { error } = await supabase.from(tableName).insert(data);
+    
+    if (error) throw error;
+    
+    // Update metadata
+    const { error: metaError } = await supabase
+      .from('csv_datasets')
+      .upsert({
+        name: datasets[datasetKey].name,
+        type: tableName,
+        content: JSON.stringify(data.slice(0, 10)), // Store preview data
+        last_updated: new Date().toISOString(),
+        notes: datasets[datasetKey].notes
+      }, {
+        onConflict: 'type'
+      });
+      
+    if (metaError) throw metaError;
+  };
+  
+  // Handle notes change
+  const handleNotesChange = (datasetKey: string, notes: string) => {
     setDatasets(prev => ({
       ...prev,
-      [datasetType]: [...(prev[datasetType] || []), newRow]
+      [datasetKey]: {
+        ...prev[datasetKey],
+        notes
+      }
+    }));
+    
+    // Save notes to database
+    supabase
+      .from('csv_datasets')
+      .upsert({
+        name: datasets[datasetKey].name,
+        type: `${datasetKey}_standards`,
+        notes
+      }, {
+        onConflict: 'type'
+      })
+      .then(() => {
+        toast({
+          title: "Notes saved",
+          description: `Notes for ${datasets[datasetKey].name} have been updated.`,
+        });
+      })
+      .catch(error => {
+        console.error('Error saving notes:', error);
+      });
+  };
+  
+  // Handle adding a new row
+  const handleAddRow = (datasetKey: string) => {
+    const emptyRow: any = {};
+    
+    // Create an empty row with all required columns
+    columnConfigs[datasetKey].forEach(column => {
+      emptyRow[column.accessorKey] = '';
+    });
+    
+    // Add id for tracking
+    emptyRow.id = `new-${Date.now()}`;
+    
+    // Add to dataset
+    setDatasets(prev => ({
+      ...prev,
+      [datasetKey]: {
+        ...prev[datasetKey],
+        data: [...(prev[datasetKey].data || []), emptyRow]
+      }
     }));
   };
   
-  // Download CSV
-  const downloadCSV = (datasetType: string) => {
-    if (!datasets[datasetType] || datasets[datasetType].length === 0) {
-      toast({
-        title: "No data to download",
-        description: "There is no data to download for this dataset.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    const typeInfo = datasetTypes.find(t => t.id === datasetType);
-    if (!typeInfo) return;
-    
-    try {
-      // Convert to CSV format
-      const headers = Object.keys(datasets[datasetType][0]);
-      const csvContent = [
-        headers.join(','),
-        ...datasets[datasetType].map((row: any) => headers.map(header => row[header]).join(','))
-      ].join('\n');
+  // Handle cell edit
+  const handleCellEdit = (datasetKey: string, rowIndex: number, columnKey: string, value: string) => {
+    setDatasets(prev => {
+      if (!prev[datasetKey].data) return prev;
       
-      // Create download link
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', typeInfo.fileName);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (error) {
-      console.error("Error downloading CSV:", error);
-      toast({
-        title: "Error",
-        description: "Failed to download CSV file.",
-        variant: "destructive"
-      });
-    }
+      const newData = [...prev[datasetKey].data!];
+      newData[rowIndex] = {
+        ...newData[rowIndex],
+        [columnKey]: value
+      };
+      
+      return {
+        ...prev,
+        [datasetKey]: {
+          ...prev[datasetKey],
+          data: newData
+        }
+      };
+    });
   };
   
-  // Update dataset notes
-  const updateDatasetNotes = async (datasetType: string, notes: string) => {
+  // Save edited data
+  const handleSaveData = async (datasetKey: string) => {
+    if (!datasets[datasetKey].data) return;
+    
     try {
-      const { data } = await supabase
-        .from('csv_datasets')
-        .select('id')
-        .eq('type', datasetType)
-        .single();
-        
-      if (data) {
-        await supabase
-          .from('csv_datasets')
-          .update({ notes })
-          .eq('id', data.id);
-          
-        setDatasetMeta(prev => ({
-          ...prev,
-          [datasetType]: {
-            ...prev[datasetType],
-            notes
-          }
-        }));
-        
-        toast({
-          title: "Notes updated",
-          description: "Dataset notes have been updated successfully."
-        });
-      }
-    } catch (error) {
-      console.error("Error updating notes:", error);
+      await saveDataset(datasetKey, datasets[datasetKey].data);
+      
       toast({
-        title: "Error",
-        description: "Failed to update notes.",
+        title: "Data saved",
+        description: `${datasets[datasetKey].name} data has been saved to the database.`,
+      });
+    } catch (error) {
+      console.error('Error saving data:', error);
+      toast({
+        title: "Save failed",
+        description: "Could not save data to the database.",
         variant: "destructive"
       });
     }
   };
   
-  // Export all datasets as ZIP
-  const exportAllDatasets = () => {
-    toast({
-      title: "Export feature",
-      description: "This feature is not yet implemented."
-    });
-  };
-  
-  // Filter data based on search query and column
-  const getFilteredData = (datasetType: string) => {
-    if (!datasets[datasetType]) return [];
+  // Handle download CSV
+  const handleDownloadCSV = (datasetKey: string) => {
+    if (!datasets[datasetKey].data) return;
     
-    if (!searchQuery) return datasets[datasetType];
+    // Convert data to CSV
+    const headers = columnConfigs[datasetKey].map(col => col.header);
+    const keys = columnConfigs[datasetKey].map(col => col.accessorKey);
     
-    return datasets[datasetType].filter((row: any) => {
-      if (filterColumn && row[filterColumn]) {
-        return String(row[filterColumn]).toLowerCase().includes(searchQuery.toLowerCase());
-      } else {
-        // Search across all columns
-        return Object.values(row).some(
-          (value) => value && String(value).toLowerCase().includes(searchQuery.toLowerCase())
-        );
-      }
+    let csv = headers.join(',') + '\n';
+    
+    datasets[datasetKey].data!.forEach(row => {
+      const values = keys.map(key => {
+        const value = row[key];
+        // Escape commas and quotes
+        return typeof value === 'string'
+          ? `"${value.replace(/"/g, '""')}"`
+          : value;
+      });
+      csv += values.join(',') + '\n';
     });
+    
+    // Create download link
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.setAttribute('href', url);
+    a.setAttribute('download', `${datasets[datasetKey].name.replace(/\s+/g, '_')}.csv`);
+    a.click();
+    
+    URL.revokeObjectURL(url);
   };
   
-  // Get column names for a dataset
-  const getColumnNames = (datasetType: string) => {
-    if (!datasets[datasetType] || datasets[datasetType].length === 0) {
-      return [];
-    }
-    return Object.keys(datasets[datasetType][0]);
-  };
-  
-  // Render table headers
-  const renderTableHeaders = (datasetType: string) => {
-    const columns = getColumnNames(datasetType);
-    return (
-      <TableRow>
-        {columns.map((column) => (
-          <TableHead key={column}>{column}</TableHead>
-        ))}
-        <TableHead>Actions</TableHead>
-      </TableRow>
-    );
-  };
-  
-  // Render table rows
-  const renderTableRows = (datasetType: string) => {
-    const filteredData = getFilteredData(datasetType);
-    return filteredData.map((row: any, rowIndex: number) => (
-      <TableRow key={rowIndex}>
-        {Object.entries(row).map(([columnName, value]) => (
-          <TableCell key={columnName}>
-            {editingCell && editingCell.rowIndex === rowIndex && editingCell.columnName === columnName ? (
-              <div className="flex items-center space-x-2">
-                <Input
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  className="w-full"
-                />
-                <Button 
-                  size="sm" 
-                  onClick={() => saveCellEdit(datasetType, rowIndex, columnName)}
-                >
-                  <Save className="h-4 w-4" />
-                </Button>
-              </div>
-            ) : (
-              <div 
-                className="cursor-pointer hover:bg-gray-100 p-1 rounded" 
-                onClick={() => handleCellEdit(rowIndex, columnName, value)}
-              >
-                {value}
-              </div>
-            )}
-          </TableCell>
-        ))}
-        <TableCell>
-          {/* Additional actions like delete row could go here */}
-        </TableCell>
-      </TableRow>
-    ));
+  // Filter data based on search term
+  const getFilteredData = (datasetKey: string) => {
+    if (!datasets[datasetKey].data) return [];
+    
+    const searchTerm = filters[datasetKey].toLowerCase();
+    
+    if (!searchTerm) return datasets[datasetKey].data;
+    
+    return datasets[datasetKey].data!.filter(row => {
+      return Object.entries(row).some(([key, value]) => {
+        if (typeof value === 'string' || typeof value === 'number') {
+          return value.toString().toLowerCase().includes(searchTerm);
+        }
+        return false;
+      });
+    });
   };
   
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="container mx-auto">
-        <div className="flex items-center mb-6">
-          <Link to="/" className="mr-4">
-            <Button variant="outline" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-8">
+        <header className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-primary">Data Dashboard</h1>
+            <p className="text-gray-600 mt-1">Manage CSV datasets for the Hawaii Code Wizard</p>
+          </div>
+          <Link to="/">
+            <Button variant="outline" className="flex items-center gap-2">
+              <ArrowLeft className="w-4 h-4" /> 
               Back to Wizard
             </Button>
           </Link>
-          <h1 className="text-3xl font-bold">Hawaiʻi Code Wizard - Data Dashboard</h1>
-        </div>
+        </header>
         
-        {missingDatasets.length > 0 && (
-          <Alert className="mb-6 bg-amber-50 border-amber-300">
-            <AlertTriangle className="h-5 w-5 text-amber-600" />
-            <AlertDescription className="ml-2">
-              Missing required datasets: {missingDatasets.join(", ")}
-            </AlertDescription>
-          </Alert>
-        )}
-        
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="mb-6">
-            <TabsTrigger value="upload">Upload CSV</TabsTrigger>
-            <TabsTrigger value="zoning">Zoning Standards</TabsTrigger>
-            <TabsTrigger value="parking">Parking Requirements</TabsTrigger>
-            <TabsTrigger value="ada">ADA Requirements</TabsTrigger>
-          </TabsList>
-          
-          {/* Upload CSV Tab */}
-          <TabsContent value="upload">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {datasetTypes.map((dataset) => (
-                <Card key={dataset.id} className="shadow-md">
-                  <CardHeader>
-                    <CardTitle>{dataset.name}</CardTitle>
-                    <CardDescription>
-                      Upload {dataset.fileName} to update {dataset.name.toLowerCase()}.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors">
-                      <label htmlFor={`file-upload-${dataset.id}`} className="cursor-pointer block">
-                        <Upload className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                        <p className="text-sm font-medium mb-1">Click to upload</p>
-                        <p className="text-xs text-gray-500">CSV format only</p>
-                        <Input
-                          id={`file-upload-${dataset.id}`}
-                          type="file"
-                          accept=".csv"
-                          className="hidden"
-                          onChange={(e) => handleFileUpload(e, dataset.id)}
-                          disabled={uploading}
-                        />
-                      </label>
-                    </div>
-                    
-                    {datasets[dataset.id] && (
-                      <div className="mt-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium">Preview:</span>
-                          <span className="text-xs text-gray-500">
-                            {datasetMeta[dataset.id]?.lastUpdated ? 
-                              `Last updated: ${datasetMeta[dataset.id].lastUpdated}` : ''}
-                          </span>
-                        </div>
-                        
-                        <div className="overflow-x-auto max-h-40 border rounded">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                {datasets[dataset.id] && datasets[dataset.id].length > 0 && 
-                                  Object.keys(datasets[dataset.id][0]).map((column) => (
-                                    <TableHead key={column} className="text-xs whitespace-nowrap">
-                                      {column}
-                                    </TableHead>
-                                  ))
-                                }
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {datasets[dataset.id] && 
-                                datasets[dataset.id]
-                                  .slice(0, 5)
-                                  .map((row: any, index: number) => (
-                                    <TableRow key={index}>
-                                      {Object.values(row).map((cell: any, cellIndex: number) => (
-                                        <TableCell key={cellIndex} className="text-xs py-1">
-                                          {String(cell).substring(0, 20)}
-                                          {String(cell).length > 20 ? '...' : ''}
-                                        </TableCell>
-                                      ))}
-                                    </TableRow>
-                                  ))
-                              }
-                            </TableBody>
-                          </Table>
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                  <CardFooter className="flex justify-between">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setActiveTab(dataset.id)}
-                      disabled={!datasets[dataset.id]}
-                    >
-                      View Full Data
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      onClick={() => downloadCSV(dataset.id)}
-                      disabled={!datasets[dataset.id]}
-                    >
-                      <Download className="h-4 w-4 mr-1" />
-                      Download CSV
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>CSV Management</CardTitle>
+            <CardDescription>
+              Upload and manage CSV files for zoning, parking, and ADA requirements
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-3 gap-6">
+              {/* Zoning Standards Upload */}
+              <div className="space-y-2">
+                <Label htmlFor="zoning-upload">Zoning Standards</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    id="zoning-upload" 
+                    ref={zoningInputRef}
+                    type="file" 
+                    accept=".csv"
+                    onChange={(e) => handleFileUpload(e, 'zoning')}
+                  />
+                  {datasets.zoning.status === 'loaded' && (
+                    <Badge className="bg-green-500">
+                      <CheckCircle2 className="w-3 h-3 mr-1" /> Loaded
+                    </Badge>
+                  )}
+                  {datasets.zoning.status === 'missing' && (
+                    <Badge variant="destructive">
+                      <X className="w-3 h-3 mr-1" /> Missing
+                    </Badge>
+                  )}
+                  {datasets.zoning.status === 'uploading' && (
+                    <Badge variant="outline">
+                      <span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent text-primary rounded-full mr-1" />
+                      Uploading
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              
+              {/* Parking Requirements Upload */}
+              <div className="space-y-2">
+                <Label htmlFor="parking-upload">Parking Requirements</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    id="parking-upload" 
+                    ref={parkingInputRef}
+                    type="file" 
+                    accept=".csv"
+                    onChange={(e) => handleFileUpload(e, 'parking')}
+                  />
+                  {datasets.parking.status === 'loaded' && (
+                    <Badge className="bg-green-500">
+                      <CheckCircle2 className="w-3 h-3 mr-1" /> Loaded
+                    </Badge>
+                  )}
+                  {datasets.parking.status === 'missing' && (
+                    <Badge variant="destructive">
+                      <X className="w-3 h-3 mr-1" /> Missing
+                    </Badge>
+                  )}
+                  {datasets.parking.status === 'uploading' && (
+                    <Badge variant="outline">
+                      <span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent text-primary rounded-full mr-1" />
+                      Uploading
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              
+              {/* ADA Requirements Upload */}
+              <div className="space-y-2">
+                <Label htmlFor="ada-upload">ADA Requirements</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    id="ada-upload" 
+                    ref={adaInputRef}
+                    type="file" 
+                    accept=".csv"
+                    onChange={(e) => handleFileUpload(e, 'ada')}
+                  />
+                  {datasets.ada.status === 'loaded' && (
+                    <Badge className="bg-green-500">
+                      <CheckCircle2 className="w-3 h-3 mr-1" /> Loaded
+                    </Badge>
+                  )}
+                  {datasets.ada.status === 'missing' && (
+                    <Badge variant="destructive">
+                      <X className="w-3 h-3 mr-1" /> Missing
+                    </Badge>
+                  )}
+                  {datasets.ada.status === 'uploading' && (
+                    <Badge variant="outline">
+                      <span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent text-primary rounded-full mr-1" />
+                      Uploading
+                    </Badge>
+                  )}
+                </div>
+              </div>
             </div>
             
-            <Card className="mt-6 shadow-md">
-              <CardHeader>
-                <CardTitle>Data Export</CardTitle>
-                <CardDescription>
-                  Export all datasets as CSV files in a single ZIP archive
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center">
-                  <Button onClick={exportAllDatasets} className="w-full sm:w-auto">
-                    <FileUp className="h-4 w-4 mr-2" />
-                    Export All as ZIP
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          {/* Zoning Standards Tab */}
-          <TabsContent value="zoning">
-            <Card className="shadow-md">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Zoning Standards</CardTitle>
-                  <div className="flex space-x-2">
-                    <Button onClick={() => addNewRow('zoning')} variant="outline" size="sm">
-                      <PlusCircle className="h-4 w-4 mr-1" />
-                      Add Row
-                    </Button>
-                    <Button 
-                      onClick={() => downloadCSV('zoning')} 
-                      size="sm"
-                      disabled={!datasets.zoning}
-                    >
-                      <Download className="h-4 w-4 mr-1" />
-                      Download CSV
-                    </Button>
+            {/* Missing Files Warning */}
+            {(datasets.zoning.status === 'missing' || 
+              datasets.parking.status === 'missing' || 
+              datasets.ada.status === 'missing') && (
+              <Alert variant="destructive" className="mt-6">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Missing Required Files</AlertTitle>
+                <AlertDescription>
+                  Some required data files are missing. The wizard may not function correctly until all files are uploaded.
+                </AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+        
+        {/* Tabbed Data Tables */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Data Tables</CardTitle>
+            <CardDescription>
+              View and edit data for each category
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-3 mb-8">
+                <TabsTrigger value="zoning">Zoning Standards</TabsTrigger>
+                <TabsTrigger value="parking">Parking Requirements</TabsTrigger>
+                <TabsTrigger value="ada">ADA Requirements</TabsTrigger>
+              </TabsList>
+              
+              {['zoning', 'parking', 'ada'].map(datasetKey => (
+                <TabsContent key={datasetKey} value={datasetKey} className="space-y-6">
+                  {/* Dataset Info and Controls */}
+                  <div className="flex flex-col md:flex-row justify-between mb-6 gap-4">
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-medium">{datasets[datasetKey as keyof typeof datasets].name}</h3>
+                      {datasets[datasetKey as keyof typeof datasets].lastUpdated && (
+                        <p className="text-sm text-gray-500">
+                          Last updated: {new Date(datasets[datasetKey as keyof typeof datasets].lastUpdated as string).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Button onClick={() => handleAddRow(datasetKey)} size="sm" className="flex items-center gap-1">
+                        <Plus className="w-4 h-4" /> Add Row
+                      </Button>
+                      <Button onClick={() => handleSaveData(datasetKey)} size="sm" className="flex items-center gap-1">
+                        <Upload className="w-4 h-4" /> Save Changes
+                      </Button>
+                      <Button 
+                        onClick={() => handleDownloadCSV(datasetKey)} 
+                        variant="outline" 
+                        size="sm"
+                        disabled={!datasets[datasetKey as keyof typeof datasets].data}
+                        className="flex items-center gap-1"
+                      >
+                        <Download className="w-4 h-4" /> Download CSV
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                
-                <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2 mt-2">
-                  <div className="relative flex-grow">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+                  
+                  {/* Search and Filter */}
+                  <div className="relative mb-4">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
                     <Input
-                      placeholder="Search..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-8"
+                      placeholder="Search data..."
+                      value={filters[datasetKey as keyof typeof filters]}
+                      onChange={(e) => setFilters(prev => ({...prev, [datasetKey]: e.target.value}))}
+                      className="pl-9"
                     />
                   </div>
-                  <select 
-                    className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={filterColumn}
-                    onChange={(e) => setFilterColumn(e.target.value)}
-                  >
-                    <option value="">All Columns</option>
-                    {getColumnNames('zoning').map(column => (
-                      <option key={column} value={column}>{column}</option>
-                    ))}
-                  </select>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {datasets.zoning ? (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        {renderTableHeaders('zoning')}
-                      </TableHeader>
-                      <TableBody>
-                        {renderTableRows('zoning')}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <div className="text-center py-10">
-                    <Info className="h-12 w-12 mx-auto text-gray-300 mb-2" />
-                    <p>No zoning data available. Please upload a CSV file.</p>
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter>
-                <Collapsible className="w-full">
-                  <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="sm">
-                      Dataset Notes
-                    </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="mt-2">
-                      <textarea
-                        value={datasetMeta.zoning?.notes || ''}
-                        onChange={(e) => updateDatasetNotes('zoning', e.target.value)}
-                        className="w-full border rounded p-2 text-sm"
-                        placeholder="Add notes about this dataset..."
-                        rows={3}
-                      />
+                  
+                  {/* Data Table */}
+                  {datasets[datasetKey as keyof typeof datasets].data ? (
+                    <div className="overflow-x-auto border rounded-md">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            {columnConfigs[datasetKey].map((column) => (
+                              <TableHead key={column.accessorKey}>{column.header}</TableHead>
+                            ))}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {getFilteredData(datasetKey).map((row, rowIndex) => (
+                            <TableRow key={rowIndex}>
+                              {columnConfigs[datasetKey].map((column) => (
+                                <TableCell key={column.accessorKey}>
+                                  <Input
+                                    value={row[column.accessorKey] || ''}
+                                    onChange={(e) => handleCellEdit(
+                                      datasetKey, 
+                                      rowIndex, 
+                                      column.accessorKey, 
+                                      e.target.value
+                                    )}
+                                  />
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-          
-          {/* Parking Requirements Tab */}
-          <TabsContent value="parking">
-            <Card className="shadow-md">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Parking Requirements</CardTitle>
-                  <div className="flex space-x-2">
-                    <Button onClick={() => addNewRow('parking')} variant="outline" size="sm">
-                      <PlusCircle className="h-4 w-4 mr-1" />
-                      Add Row
-                    </Button>
-                    <Button 
-                      onClick={() => downloadCSV('parking')} 
-                      size="sm"
-                      disabled={!datasets.parking}
-                    >
-                      <Download className="h-4 w-4 mr-1" />
-                      Download CSV
-                    </Button>
-                  </div>
-                </div>
-                
-                <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2 mt-2">
-                  <div className="relative flex-grow">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Search..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-8"
+                  ) : (
+                    <div className="text-center py-12 border rounded-md bg-gray-50">
+                      <p className="text-gray-500">No data available. Please upload a CSV file.</p>
+                    </div>
+                  )}
+                  
+                  {/* Notes Section */}
+                  <div className="mt-6">
+                    <Label htmlFor={`${datasetKey}-notes`}>Notes</Label>
+                    <Textarea
+                      id={`${datasetKey}-notes`}
+                      placeholder="Add notes about this dataset..."
+                      value={datasets[datasetKey as keyof typeof datasets].notes}
+                      onChange={(e) => handleNotesChange(datasetKey, e.target.value)}
+                      className="min-h-[100px]"
                     />
                   </div>
-                  <select 
-                    className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={filterColumn}
-                    onChange={(e) => setFilterColumn(e.target.value)}
-                  >
-                    <option value="">All Columns</option>
-                    {getColumnNames('parking').map(column => (
-                      <option key={column} value={column}>{column}</option>
-                    ))}
-                  </select>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {datasets.parking ? (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        {renderTableHeaders('parking')}
-                      </TableHeader>
-                      <TableBody>
-                        {renderTableRows('parking')}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <div className="text-center py-10">
-                    <Info className="h-12 w-12 mx-auto text-gray-300 mb-2" />
-                    <p>No parking data available. Please upload a CSV file.</p>
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter>
-                <Collapsible className="w-full">
-                  <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="sm">
-                      Dataset Notes
-                    </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="mt-2">
-                      <textarea
-                        value={datasetMeta.parking?.notes || ''}
-                        onChange={(e) => updateDatasetNotes('parking', e.target.value)}
-                        className="w-full border rounded p-2 text-sm"
-                        placeholder="Add notes about this dataset..."
-                        rows={3}
-                      />
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-          
-          {/* ADA Requirements Tab */}
-          <TabsContent value="ada">
-            <Card className="shadow-md">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>ADA Stall Requirements</CardTitle>
-                  <div className="flex space-x-2">
-                    <Button onClick={() => addNewRow('ada')} variant="outline" size="sm">
-                      <PlusCircle className="h-4 w-4 mr-1" />
-                      Add Row
-                    </Button>
-                    <Button 
-                      onClick={() => downloadCSV('ada')} 
-                      size="sm"
-                      disabled={!datasets.ada}
-                    >
-                      <Download className="h-4 w-4 mr-1" />
-                      Download CSV
-                    </Button>
-                  </div>
-                </div>
-                
-                <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2 mt-2">
-                  <div className="relative flex-grow">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Search..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-8"
-                    />
-                  </div>
-                  <select 
-                    className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={filterColumn}
-                    onChange={(e) => setFilterColumn(e.target.value)}
-                  >
-                    <option value="">All Columns</option>
-                    {getColumnNames('ada').map(column => (
-                      <option key={column} value={column}>{column}</option>
-                    ))}
-                  </select>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {datasets.ada ? (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        {renderTableHeaders('ada')}
-                      </TableHeader>
-                      <TableBody>
-                        {renderTableRows('ada')}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <div className="text-center py-10">
-                    <Info className="h-12 w-12 mx-auto text-gray-300 mb-2" />
-                    <p>No ADA data available. Please upload a CSV file.</p>
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter>
-                <Collapsible className="w-full">
-                  <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="sm">
-                      Dataset Notes
-                    </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="mt-2">
-                      <textarea
-                        value={datasetMeta.ada?.notes || ''}
-                        onChange={(e) => updateDatasetNotes('ada', e.target.value)}
-                        className="w-full border rounded p-2 text-sm"
-                        placeholder="Add notes about this dataset..."
-                        rows={3}
-                      />
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                </TabsContent>
+              ))}
+            </Tabs>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
