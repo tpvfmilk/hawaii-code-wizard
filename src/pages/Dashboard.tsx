@@ -38,6 +38,11 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { parseCSV } from "@/utils/CSVHelper";
 import { supabase } from "@/integrations/supabase/client";
+import { SupabaseClient } from '@supabase/supabase-js';
+import { Database } from "@/integrations/supabase/types";
+
+// Define literal type for valid table names in our database
+type TableName = 'zoning_standards' | 'parking_requirements' | 'ada_requirements' | 'csv_datasets';
 
 interface DatasetInfo {
   name: string;
@@ -130,6 +135,22 @@ const Dashboard = () => {
     ]
   };
   
+  // Helper function to safely get a table reference
+  const getTableRef = (tableName: string) => {
+    // Validate if the table name is one of our known tables
+    if (
+      tableName === 'zoning_standards' || 
+      tableName === 'parking_requirements' || 
+      tableName === 'ada_requirements' || 
+      tableName === 'csv_datasets'
+    ) {
+      return supabase.from(tableName as TableName);
+    }
+    
+    console.error(`Invalid table name: ${tableName}`);
+    throw new Error(`Invalid table name: ${tableName}`);
+  };
+  
   // Function to fetch all datasets from Supabase
   const fetchDatasets = async () => {
     try {
@@ -162,19 +183,22 @@ const Dashboard = () => {
         
         // Fetch actual data for each dataset
         for (const key of Object.keys(updatedDatasets)) {
-          const tableMap: Record<string, string> = {
+          const tableMap: Record<string, TableName> = {
             zoning: 'zoning_standards',
             parking: 'parking_requirements',
             ada: 'ada_requirements'
           };
           
-          const { data } = await supabase
-            .from(tableMap[key])
-            .select('*');
-            
-          if (data && data.length > 0) {
-            updatedDatasets[key].data = data;
-            updatedDatasets[key].status = 'loaded';
+          const tableName = tableMap[key];
+          if (tableName) {
+            const { data } = await supabase
+              .from(tableName)
+              .select('*');
+              
+            if (data && data.length > 0) {
+              updatedDatasets[key].data = data;
+              updatedDatasets[key].status = 'loaded';
+            }
           }
         }
         
@@ -285,19 +309,22 @@ const Dashboard = () => {
   
   // Save dataset to Supabase
   const saveDataset = async (datasetKey: string, data: any[]) => {
-    const tableMap: Record<string, string> = {
+    const tableMap: Record<string, TableName> = {
       zoning: 'zoning_standards',
       parking: 'parking_requirements',
       ada: 'ada_requirements'
     };
     
     const tableName = tableMap[datasetKey];
+    if (!tableName) {
+      throw new Error(`Invalid dataset key: ${datasetKey}`);
+    }
     
     // First, delete existing records
-    await supabase.from(tableName).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await getTableRef(tableName).delete().neq('id', '00000000-0000-0000-0000-000000000000');
     
     // Then insert new records
-    const { error } = await supabase.from(tableName).insert(data);
+    const { error } = await getTableRef(tableName).insert(data);
     
     if (error) throw error;
     
