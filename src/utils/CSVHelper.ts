@@ -1,3 +1,4 @@
+
 export interface ParsedCSVData {
   data: any[];
   originalHeaders: string[];
@@ -363,7 +364,7 @@ export const calculateADAParking = (
   }
   
   // Use the provided dataset to find the matching range
-  for (const row of dataset) {
+  for (const row of data) {
     const rangeString = row.total_parking_spaces_provided?.toString() || "";
     
     // Handle different range formats
@@ -415,19 +416,22 @@ export const calculateADAParking = (
 
 /**
  * Look up IBC building height limits based on occupancy and construction
- * @param dataset Array of IBC height limit objects
+ * @param dataset Array of IBC height limit objects or ParsedCSVData
  * @param occupancyGroup IBC occupancy group
  * @param constructionType IBC construction type
  * @param sprinklered Whether the building is sprinklered
  * @returns Maximum building height in feet
  */
 export const lookupBuildingHeight = (
-  dataset: any[],
+  dataset: any[] | ParsedCSVData,
   occupancyGroup: string,
   constructionType: string,
   sprinklered: boolean
 ): { limit: number; description: string } => {
-  if (!dataset || dataset.length === 0) {
+  // If we received a ParsedCSVData object, extract the data array
+  const data = Array.isArray(dataset) ? dataset : dataset.data;
+  
+  if (!data || data.length === 0) {
     return { 
       limit: 0, 
       description: "No IBC height data available. Please upload IBC Table 504.3 CSV file." 
@@ -435,7 +439,7 @@ export const lookupBuildingHeight = (
   }
   
   // Find the matching row
-  const match = dataset.find((row: any) => {
+  const match = data.find((row: any) => {
     return (
       row.occupancy?.toLowerCase() === occupancyGroup.toLowerCase() && 
       row.type_of_construction?.toLowerCase() === constructionType.toLowerCase()
@@ -461,15 +465,18 @@ export const lookupBuildingHeight = (
 
 /**
  * Validate that uploaded CSV has the expected structure for a particular dataset
- * @param data Parsed CSV data
+ * @param data Parsed CSV data or array of data objects
  * @param datasetType Type of dataset (e.g., "zoning", "parking")
  * @returns Object with validation result and error message
  */
 export const validateDatasetStructure = (
-  data: any[], 
+  data: any[] | ParsedCSVData, 
   datasetType: string
 ): { valid: boolean; message: string; missingColumns: string[] } => {
-  if (!data || data.length === 0) {
+  // If we received a ParsedCSVData object, extract the data array
+  const dataArray = Array.isArray(data) ? data : data.data;
+  
+  if (!dataArray || dataArray.length === 0) {
     return { 
       valid: false, 
       message: "The uploaded file contains no data.", 
@@ -494,7 +501,7 @@ export const validateDatasetStructure = (
     };
   }
   
-  const missingColumns = getMissingColumns(data, requiredColumns[datasetType]);
+  const missingColumns = getMissingColumns(dataArray, requiredColumns[datasetType]);
   
   if (missingColumns.length > 0) {
     return {
@@ -506,7 +513,7 @@ export const validateDatasetStructure = (
   
   return {
     valid: true,
-    message: `${data.length} records successfully validated.`,
+    message: `${dataArray.length} records successfully validated.`,
     missingColumns: []
   };
 };
