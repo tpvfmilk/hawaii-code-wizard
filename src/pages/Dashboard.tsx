@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { 
@@ -345,7 +344,7 @@ const Dashboard = () => {
   };
   
   // Handle notes change
-  const handleNotesChange = (datasetKey: string, notes: string) => {
+  const handleNotesChange = async (datasetKey: string, notes: string) => {
     setDatasets(prev => ({
       ...prev,
       [datasetKey]: {
@@ -356,7 +355,8 @@ const Dashboard = () => {
     
     // Save notes to database
     try {
-      const { error } = supabase
+      // We need to await the response to access the error property
+      const response = await supabase
         .from('csv_datasets')
         .upsert({
           name: datasets[datasetKey].name,
@@ -367,8 +367,8 @@ const Dashboard = () => {
         });
         
       // Handle potential error synchronously
-      if (error) {
-        console.error('Error saving notes:', error);
+      if (response.error) {
+        console.error('Error saving notes:', response.error);
         toast({
           title: "Error saving notes",
           description: "Failed to save notes. Please try again.",
