@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
@@ -11,13 +11,18 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { 
   occupancyGroups, 
   constructionTypes, 
   requiredDatasets 
 } from "@/data/codeData";
-import { parseCSV, checkRequiredColumns } from "@/utils/CSVHelper";
+import { 
+  parseCSV, 
+  validateDatasetStructure,
+  lookupBuildingHeight 
+} from "@/utils/CSVHelper";
+import { Badge } from "@/components/ui/badge";
 
 interface OccupancyConstructionProps {
   occupancyData: {
@@ -39,10 +44,30 @@ const OccupancyConstruction = ({
   onOccupancyDataChange,
   onDatasetUploaded
 }: OccupancyConstructionProps) => {
-  const [missingDataAlert, setMissingDataAlert] = useState({
-    heightLimits: false,
-    storyLimits: false,
-    areaLimits: false
+  const [validationMessage, setValidationMessage] = useState<{type: 'success' | 'error' | 'warning'; message: string}>({
+    type: 'warning',
+    message: ''
+  });
+  const [heightLimitsData, setHeightLimitsData] = useState<any[]>([]);
+  const [storyLimitsData, setStoryLimitsData] = useState<any[]>([]);
+  const [areaLimitsData, setAreaLimitsData] = useState<any[]>([]);
+  const [codeViolations, setCodeViolations] = useState<{
+    height: boolean;
+    stories: boolean;
+    area: boolean;
+  }>({
+    height: false,
+    stories: false,
+    area: false
+  });
+  const [codeLimits, setCodeLimits] = useState<{
+    height: { limit: number; description: string };
+    stories: { limit: number; description: string };
+    area: { limit: number; description: string };
+  }>({
+    height: { limit: 0, description: "No height data available" },
+    stories: { limit: 0, description: "No story data available" },
+    area: { limit: 0, description: "No area data available" }
   });
 
   const handleSecondaryOccupancyChange = (occupancyId: string) => {
@@ -68,24 +93,100 @@ const OccupancyConstruction = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const csvData = parseCSV(event.target?.result as string);
-        const requiredColumns = requiredDatasets[datasetType as keyof typeof requiredDatasets].requiredColumns;
+        const result = parseCSV(event.target?.result as string);
+        const { data } = result;
         
-        if (checkRequiredColumns(csvData, requiredColumns)) {
-          onDatasetUploaded(datasetType, csvData);
-          setMissingDataAlert(prev => ({ ...prev, [datasetType]: false }));
+        // Validate dataset structure
+        const validation = validateDatasetStructure(data, datasetType);
+        
+        if (validation.valid) {
+          onDatasetUploaded(datasetType, data);
+          
+          // Store the dataset in local state based on type
+          if (datasetType === "heightLimits") {
+            setHeightLimitsData(data);
+          } else if (datasetType === "storyLimits") {
+            setStoryLimitsData(data);
+          } else if (datasetType === "areaLimits") {
+            setAreaLimitsData(data);
+          }
+          
+          setValidationMessage({
+            type: 'success',
+            message: `Successfully uploaded ${data.length} records for ${datasetType}.`
+          });
+          
+          // Clear message after 3 seconds
+          setTimeout(() => {
+            setValidationMessage({ type: 'warning', message: '' });
+          }, 3000);
         } else {
-          console.error(`CSV for ${datasetType} missing required columns`);
-          setMissingDataAlert(prev => ({ ...prev, [datasetType]: true }));
+          setValidationMessage({
+            type: 'error',
+            message: validation.message
+          });
         }
       } catch (error) {
         console.error(`Error parsing ${datasetType} CSV:`, error);
-        setMissingDataAlert(prev => ({ ...prev, [datasetType]: true }));
+        setValidationMessage({
+          type: 'error',
+          message: `Error parsing CSV: ${(error as Error).message}`
+        });
       }
     };
     
     reader.readAsText(file);
   };
+  
+  // Update code limits whenever relevant data changes
+  useEffect(() => {
+    const checkCodeLimits = () => {
+      // Only check if we have all necessary data
+      if (occupancyData.primaryOccupancy && occupancyData.constructionType) {
+        // Check height limits
+        if (heightLimitsData.length > 0) {
+          const heightLimit = lookupBuildingHeight(
+            heightLimitsData,
+            occupancyData.primaryOccupancy,
+            occupancyData.constructionType,
+            occupancyData.sprinklered
+          );
+          
+          setCodeLimits(prev => ({
+            ...prev,
+            height: heightLimit
+          }));
+          
+          // Check if entered height exceeds limit
+          if (parseFloat(occupancyData.buildingHeight) > heightLimit.limit && heightLimit.limit > 0) {
+            setCodeViolations(prev => ({
+              ...prev,
+              height: true
+            }));
+          } else {
+            setCodeViolations(prev => ({
+              ...prev,
+              height: false
+            }));
+          }
+        }
+        
+        // Similar checks for stories and area could be implemented here
+      }
+    };
+    
+    checkCodeLimits();
+  }, [
+    occupancyData.primaryOccupancy,
+    occupancyData.constructionType,
+    occupancyData.sprinklered,
+    occupancyData.buildingHeight,
+    occupancyData.stories,
+    occupancyData.buildingArea,
+    heightLimitsData,
+    storyLimitsData,
+    areaLimitsData
+  ]);
 
   return (
     <div className="step-container">
@@ -93,14 +194,10 @@ const OccupancyConstruction = ({
         <span className="step-icon">🏢</span> Occupancy & Construction
       </h2>
       
-      {(missingDataAlert.heightLimits || missingDataAlert.storyLimits || missingDataAlert.areaLimits) && (
-        <Alert className="mb-4 bg-amber-50 border-amber-200">
+      {validationMessage.message && (
+        <Alert className={`mb-4 ${validationMessage.type === 'success' ? 'bg-green-50 border-green-200' : validationMessage.type === 'error' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
           <AlertDescription>
-            {missingDataAlert.heightLimits && requiredDatasets.heightLimits.prompt}
-            {missingDataAlert.storyLimits && <br />}
-            {missingDataAlert.storyLimits && requiredDatasets.storyLimits.prompt}
-            {missingDataAlert.areaLimits && <br />}
-            {missingDataAlert.areaLimits && requiredDatasets.areaLimits.prompt}
+            {validationMessage.message}
           </AlertDescription>
         </Alert>
       )}
@@ -186,7 +283,14 @@ const OccupancyConstruction = ({
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="stories">Number of Stories</Label>
+              <div className="flex justify-between items-center">
+                <Label htmlFor="stories">Number of Stories</Label>
+                {codeLimits.stories.limit > 0 && (
+                  <span className="text-xs text-gray-500">
+                    Max: {codeLimits.stories.limit}
+                  </span>
+                )}
+              </div>
               <Input 
                 id="stories"
                 type="number"
@@ -194,11 +298,19 @@ const OccupancyConstruction = ({
                 placeholder="Enter stories" 
                 value={occupancyData.stories}
                 onChange={(e) => onOccupancyDataChange("stories", e.target.value)}
+                className={codeViolations.stories ? "border-red-500" : ""}
               />
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="buildingHeight">Total Building Height (ft)</Label>
+              <div className="flex justify-between items-center">
+                <Label htmlFor="buildingHeight">Building Height (ft)</Label>
+                {codeLimits.height.limit > 0 && (
+                  <span className="text-xs text-gray-500">
+                    Max: {codeLimits.height.limit} ft
+                  </span>
+                )}
+              </div>
               <Input 
                 id="buildingHeight"
                 type="number"
@@ -206,11 +318,24 @@ const OccupancyConstruction = ({
                 placeholder="Enter height in feet" 
                 value={occupancyData.buildingHeight}
                 onChange={(e) => onOccupancyDataChange("buildingHeight", e.target.value)}
+                className={codeViolations.height ? "border-red-500" : ""}
               />
+              {codeViolations.height && (
+                <p className="text-xs text-red-500 mt-1">
+                  Exceeds maximum allowed height of {codeLimits.height.limit} ft
+                </p>
+              )}
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="buildingArea">Total Building Area (SF)</Label>
+              <div className="flex justify-between items-center">
+                <Label htmlFor="buildingArea">Building Area (SF)</Label>
+                {codeLimits.area.limit > 0 && (
+                  <span className="text-xs text-gray-500">
+                    Max: {codeLimits.area.limit.toLocaleString()} SF
+                  </span>
+                )}
+              </div>
               <Input 
                 id="buildingArea"
                 type="number"
@@ -218,6 +343,7 @@ const OccupancyConstruction = ({
                 placeholder="Enter area in square feet" 
                 value={occupancyData.buildingArea}
                 onChange={(e) => onOccupancyDataChange("buildingArea", e.target.value)}
+                className={codeViolations.area ? "border-red-500" : ""}
               />
             </div>
           </div>
@@ -232,6 +358,23 @@ const OccupancyConstruction = ({
             />
             <Label htmlFor="sprinklered">Building is Sprinklered</Label>
           </div>
+          
+          {(occupancyData.primaryOccupancy && occupancyData.constructionType) && (
+            <div className="bg-blue-50 p-3 rounded-md mt-2">
+              <h4 className="text-sm font-medium mb-1">IBC Code Limits</h4>
+              <div className="text-xs text-gray-700 space-y-1">
+                <p>
+                  <span className="font-medium">Height Limit:</span> {codeLimits.height.description || 'Upload height limits data'}
+                </p>
+                <p>
+                  <span className="font-medium">Story Limit:</span> {codeLimits.stories.description || 'Upload story limits data'}
+                </p>
+                <p>
+                  <span className="font-medium">Area Limit:</span> {codeLimits.area.description || 'Upload area limits data'}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">

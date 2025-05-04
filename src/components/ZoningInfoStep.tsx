@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
@@ -12,9 +12,15 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { zoningDistricts, requiredDatasets, calculateADAParking } from "@/data/codeData";
-import { parseCSV, checkRequiredColumns } from "@/utils/CSVHelper";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { zoningDistricts, requiredDatasets } from "@/data/codeData";
+import { 
+  parseCSV, 
+  checkRequiredColumns, 
+  findZoningMatch,
+  validateDatasetStructure,
+  calculateADAParking
+} from "@/utils/CSVHelper";
 
 interface ZoningInfoStepProps {
   zoningData: {
@@ -43,9 +49,55 @@ const ZoningInfoStep = ({
   onDatasetUploaded
 }: ZoningInfoStepProps) => {
   const [showZoningAlert, setShowZoningAlert] = useState(false);
+  const [validationMessage, setValidationMessage] = useState<{type: 'success' | 'error' | 'warning'; message: string}>({ 
+    type: 'warning', 
+    message: '' 
+  });
+  const [previewData, setPreviewData] = useState<any[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
+  const [adaDataset, setAdaDataset] = useState<any[]>([]);
+  const [zoningDataset, setZoningDataset] = useState<any[]>([]);
+  
   const filteredDistricts = zoningDistricts.filter(
     district => district.jurisdiction === jurisdiction
   );
+
+  // Auto-populate fields when zoning district changes
+  useEffect(() => {
+    if (zoningData.zoningDistrict && jurisdiction && zoningDataset.length > 0) {
+      const match = findZoningMatch(zoningDataset, jurisdiction, zoningData.zoningDistrict);
+      
+      if (match) {
+        // Auto-fill fields from the dataset
+        if (match.front_setback && match.side_setback && match.rear_setback) {
+          onZoningDataChange('setbacks', `${match.front_setback},${match.side_setback},${match.rear_setback}`);
+        }
+        
+        if (match.max_far) {
+          onZoningDataChange('far', match.max_far.toString());
+        }
+        
+        if (match.max_height) {
+          onZoningDataChange('maxHeight', match.max_height.toString());
+        }
+        
+        if (match.max_lot_coverage) {
+          onZoningDataChange('lotCoverage', match.max_lot_coverage.toString());
+        }
+        
+        // Show success message
+        setValidationMessage({
+          type: 'success',
+          message: 'Zoning data auto-populated successfully!'
+        });
+        
+        // Hide message after 3 seconds
+        setTimeout(() => {
+          setValidationMessage({ type: 'warning', message: '' });
+        }, 3000);
+      }
+    }
+  }, [zoningData.zoningDistrict, jurisdiction, zoningDataset]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -54,18 +106,108 @@ const ZoningInfoStep = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const csvData = parseCSV(event.target?.result as string);
+        const result = parseCSV(event.target?.result as string);
+        const { data } = result;
+        setPreviewData(data.slice(0, 3)); // Store first 3 rows for preview
         
-        if (checkRequiredColumns(csvData, requiredDatasets.zoning.requiredColumns)) {
-          onDatasetUploaded("zoning", csvData);
+        // Validate dataset structure
+        const validation = validateDatasetStructure(data, "zoning");
+        
+        if (validation.valid) {
+          onDatasetUploaded("zoning", data);
+          setZoningDataset(data);
           setShowZoningAlert(false);
+          setValidationMessage({ 
+            type: 'success', 
+            message: `Successfully uploaded ${data.length} zoning records.` 
+          });
+          
+          // Show preview
+          setShowPreview(true);
+          
+          // Try to auto-populate if district already selected
+          if (zoningData.zoningDistrict && jurisdiction) {
+            const match = findZoningMatch(data, jurisdiction, zoningData.zoningDistrict);
+            if (match) {
+              // Auto-fill fields from the dataset
+              if (match.front_setback && match.side_setback && match.rear_setback) {
+                onZoningDataChange('setbacks', `${match.front_setback},${match.side_setback},${match.rear_setback}`);
+              }
+              
+              if (match.max_far) {
+                onZoningDataChange('far', match.max_far.toString());
+              }
+              
+              if (match.max_height) {
+                onZoningDataChange('maxHeight', match.max_height.toString());
+              }
+              
+              if (match.max_lot_coverage) {
+                onZoningDataChange('lotCoverage', match.max_lot_coverage.toString());
+              }
+            }
+          }
         } else {
-          console.error("CSV missing required columns");
           setShowZoningAlert(true);
+          setValidationMessage({ 
+            type: 'error', 
+            message: validation.message 
+          });
+          console.error("CSV validation failed:", validation.message);
         }
       } catch (error) {
         console.error("Error parsing CSV:", error);
         setShowZoningAlert(true);
+        setValidationMessage({ 
+          type: 'error', 
+          message: 'Error parsing CSV file. Please check the format.' 
+        });
+      }
+    };
+    
+    reader.readAsText(file);
+  };
+  
+  const handleADAFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const result = parseCSV(event.target?.result as string);
+        const { data } = result;
+        
+        // Validate dataset structure
+        const validation = validateDatasetStructure(data, "ada");
+        
+        if (validation.valid) {
+          onDatasetUploaded("ada", data);
+          setAdaDataset(data);
+          setValidationMessage({ 
+            type: 'success', 
+            message: `Successfully uploaded ${data.length} ADA parking requirement records.` 
+          });
+          
+          // Recalculate ADA parking if parking required is set
+          if (zoningData.parkingRequired) {
+            const totalParking = parseInt(zoningData.parkingRequired);
+            const adaResult = calculateADAParking(data, totalParking);
+            onZoningDataChange("adaParking", adaResult.required.toString());
+          }
+        } else {
+          setValidationMessage({ 
+            type: 'error', 
+            message: validation.message 
+          });
+          console.error("CSV validation failed:", validation.message);
+        }
+      } catch (error) {
+        console.error("Error parsing CSV:", error);
+        setValidationMessage({ 
+          type: 'error', 
+          message: 'Error parsing CSV file. Please check the format.' 
+        });
       }
     };
     
@@ -81,9 +223,14 @@ const ZoningInfoStep = ({
 
   // Calculate ADA parking whenever total parking changes
   React.useEffect(() => {
-    const adaRequired = calculateADAParking(totalParking);
-    onZoningDataChange("adaParking", adaRequired.toString());
-  }, [zoningData.parkingRequired]);
+    if (adaDataset.length > 0) {
+      const adaResult = calculateADAParking(adaDataset, totalParking);
+      onZoningDataChange("adaParking", adaResult.required.toString());
+    } else {
+      const adaRequired = calculateADAParking([], totalParking);
+      onZoningDataChange("adaParking", adaRequired.required.toString());
+    }
+  }, [zoningData.parkingRequired, adaDataset]);
 
   return (
     <div className="step-container">
@@ -97,6 +244,26 @@ const ZoningInfoStep = ({
             {requiredDatasets.zoning.prompt}
           </AlertDescription>
         </Alert>
+      )}
+      
+      {validationMessage.message && (
+        <Alert className={`mb-4 ${validationMessage.type === 'success' ? 'bg-green-50 border-green-200' : validationMessage.type === 'error' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+          <AlertDescription>
+            {validationMessage.message}
+          </AlertDescription>
+        </Alert>
+      )}
+      
+      {showPreview && previewData.length > 0 && (
+        <div className="mb-4 overflow-auto">
+          <h3 className="text-sm font-medium mb-2">Dataset Preview (first 3 rows):</h3>
+          <div className="text-xs bg-gray-50 p-2 rounded border max-h-32 overflow-y-auto">
+            <pre>{JSON.stringify(previewData, null, 2)}</pre>
+          </div>
+          <Button variant="ghost" size="sm" className="mt-1" onClick={() => setShowPreview(false)}>
+            Hide Preview
+          </Button>
+        </div>
       )}
       
       <div className="space-y-6">
@@ -219,13 +386,21 @@ const ZoningInfoStep = ({
           
           <div className="space-y-2">
             <Label htmlFor="adaParking">ADA Parking Required</Label>
-            <Input 
-              id="adaParking"
-              type="number"
-              min="0"
-              readOnly 
-              value={zoningData.adaParking}
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Input 
+                  id="adaParking"
+                  type="number"
+                  min="0"
+                  readOnly 
+                  value={zoningData.adaParking}
+                  className="bg-gray-50"
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Automatically calculated based on total parking spaces</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
         
@@ -275,12 +450,12 @@ const ZoningInfoStep = ({
           </div>
         </div>
         
-        <div className="pt-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
           <div className="file-upload-area">
             <label htmlFor="zoningCsvUpload" className="cursor-pointer">
               <div className="text-center">
-                <p className="text-sm font-medium mb-1">Missing zoning data?</p>
-                <p className="text-sm text-gray-500">Upload zoning CSV file</p>
+                <p className="text-sm font-medium mb-1">Upload zoning data</p>
+                <p className="text-sm text-gray-500">Upload Zoning_Standards.csv</p>
               </div>
               <input
                 id="zoningCsvUpload"
@@ -288,6 +463,22 @@ const ZoningInfoStep = ({
                 accept=".csv"
                 className="hidden"
                 onChange={handleFileUpload}
+              />
+            </label>
+          </div>
+          
+          <div className="file-upload-area">
+            <label htmlFor="adaCsvUpload" className="cursor-pointer">
+              <div className="text-center">
+                <p className="text-sm font-medium mb-1">Upload ADA requirements</p>
+                <p className="text-sm text-gray-500">Upload ADA_Stall_Requirements.csv</p>
+              </div>
+              <input
+                id="adaCsvUpload"
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={handleADAFileUpload}
               />
             </label>
           </div>
