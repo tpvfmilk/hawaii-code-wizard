@@ -38,7 +38,7 @@ const FireRatingsStep = ({
         const csvData = parseCSV(event.target?.result as string);
         
         if (checkRequiredColumns(csvData, requiredDatasets.fireRatings.requiredColumns)) {
-          onDatasetUploaded("fireRatings", csvData);
+          onDatasetUploaded("fireRatings", csvData.data);
           setShowFireAlert(false);
         } else {
           console.error("CSV missing required columns");

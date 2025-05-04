@@ -1,4 +1,3 @@
-
 export interface ParsedCSVData {
   data: any[];
   originalHeaders: string[];
@@ -88,11 +87,14 @@ export const parseCSV = (text: string): ParsedCSVData => {
 
 /**
  * Check if the data includes all required columns
- * @param data Array of parsed data objects
+ * @param parsedData Parsed CSV data object or array of data objects
  * @param requiredColumns Array of required column names
  * @returns Boolean indicating if all required columns are present
  */
-export const checkRequiredColumns = (data: any[], requiredColumns: string[]): boolean => {
+export const checkRequiredColumns = (parsedData: ParsedCSVData | any[], requiredColumns: string[]): boolean => {
+  // If we received a ParsedCSVData object, extract the data array
+  const data = Array.isArray(parsedData) ? parsedData : parsedData.data;
+  
   if (!data || data.length === 0) {
     return false;
   }
@@ -252,19 +254,22 @@ export const findZoningMatch = (
 
 /**
  * Calculate parking requirements based on use type and building metrics
- * @param dataset Array of parking requirement objects
+ * @param dataset Array of parking requirement objects or ParsedCSVData
  * @param county User-selected county/jurisdiction
  * @param useType Building use type
  * @param metrics Object containing building metrics (area, units, etc.)
  * @returns Calculated number of required parking spaces
  */
 export const calculateParkingRequirements = (
-  dataset: any[],
+  dataset: any[] | ParsedCSVData,
   county: string,
   useType: string,
   metrics: { area?: number; units?: number; }
 ): { required: number; description: string; } => {
-  if (!dataset || dataset.length === 0) {
+  // If we received a ParsedCSVData object, extract the data array
+  const data = Array.isArray(dataset) ? dataset : dataset.data;
+  
+  if (!data || data.length === 0) {
     return { 
       required: 0, 
       description: "No parking data available. Please upload Parking_Requirements.csv." 
@@ -272,7 +277,7 @@ export const calculateParkingRequirements = (
   }
   
   // Find matching requirement
-  const match = dataset.find((row: any) => {
+  const match = data.find((row: any) => {
     return (
       row.county?.toLowerCase() === county.toLowerCase() && 
       row.use_type?.toLowerCase() === useType.toLowerCase()
@@ -322,15 +327,18 @@ export const calculateParkingRequirements = (
 
 /**
  * Calculate minimum required ADA parking stalls
- * @param dataset Array of ADA parking requirement objects
+ * @param dataset Array of ADA parking requirement objects or ParsedCSVData
  * @param totalParkingSpaces Total number of parking spaces provided
  * @returns Number of required ADA parking spaces
  */
 export const calculateADAParking = (
-  dataset: any[],
+  dataset: any[] | ParsedCSVData,
   totalParkingSpaces: number
 ): { required: number; description: string } => {
-  if (!dataset || dataset.length === 0) {
+  // If we received a ParsedCSVData object, extract the data array
+  const data = Array.isArray(dataset) ? dataset : dataset.data;
+  
+  if (!data || data.length === 0) {
     // Fallback calculation if no dataset is available
     if (totalParkingSpaces <= 0) return { required: 0, description: "No parking provided" };
     if (totalParkingSpaces <= 25) return { required: 1, description: "Default: 1 space for 1-25 total spaces" };

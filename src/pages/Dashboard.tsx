@@ -231,17 +231,17 @@ const Dashboard = () => {
       
       // Parse CSV file
       const fileContent = await file.text();
-      const parsedData = parseCSV(fileContent);
+      const parsedCSV = parseCSV(fileContent);
       
-      if (!parsedData || parsedData.length === 0) {
+      if (!parsedCSV.data || parsedCSV.data.length === 0) {
         throw new Error('Invalid CSV format or empty file');
       }
       
       // Validate required columns for each dataset type
-      validateColumns(parsedData[0], datasetKey);
+      validateColumns(parsedCSV.data[0], datasetKey);
       
       // Save to Supabase
-      await saveDataset(datasetKey, parsedData);
+      await saveDataset(datasetKey, parsedCSV.data);
       
       // Update local state
       setDatasets(prev => ({
@@ -250,7 +250,7 @@ const Dashboard = () => {
           ...prev[datasetKey],
           status: 'loaded',
           lastUpdated: new Date().toISOString(),
-          data: parsedData
+          data: parsedCSV.data
         }
       }));
       

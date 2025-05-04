@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -86,7 +85,7 @@ const LifeSafetyStep = ({
         const csvData = parseCSV(event.target?.result as string);
         
         if (checkRequiredColumns(csvData, requiredDatasets.egressRequirements.requiredColumns)) {
-          onDatasetUploaded("egressRequirements", csvData);
+          onDatasetUploaded("egressRequirements", csvData.data);
           setShowEgressAlert(false);
         } else {
           console.error("CSV missing required columns");
