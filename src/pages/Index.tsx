@@ -9,6 +9,9 @@ import LifeSafetyStep from "@/components/LifeSafetyStep";
 import FireRatingsStep from "@/components/FireRatingsStep";
 import SummaryStep from "@/components/SummaryStep";
 import WizardNav from "@/components/WizardNav";
+import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
+import { Settings } from "lucide-react";
 
 const Index = () => {
   const { toast } = useToast();
@@ -198,9 +201,16 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8">
-        <header className="mb-8 text-center">
+        <header className="mb-8 text-center relative">
           <h1 className="text-3xl font-bold text-primary">Hawaiʻi Code Wizard</h1>
           <p className="text-gray-600 mt-2">Generate code & zoning summaries for Hawaiian building projects</p>
+          
+          <Link to="/dashboard" className="absolute right-0 top-0">
+            <Button variant="outline" size="sm" className="flex items-center">
+              <Settings className="h-4 w-4 mr-2" />
+              Data Dashboard
+            </Button>
+          </Link>
         </header>
         
         <Card className="max-w-5xl mx-auto">

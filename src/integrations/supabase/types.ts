@@ -9,7 +9,132 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      ada_requirements: {
+        Row: {
+          created_at: string | null
+          id: string
+          minimum_required_ada_stalls: number
+          total_parking_spaces_provided: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          minimum_required_ada_stalls: number
+          total_parking_spaces_provided: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          minimum_required_ada_stalls?: number
+          total_parking_spaces_provided?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      csv_datasets: {
+        Row: {
+          content: Json | null
+          id: string
+          last_updated: string | null
+          name: string
+          notes: string | null
+          type: string
+        }
+        Insert: {
+          content?: Json | null
+          id?: string
+          last_updated?: string | null
+          name: string
+          notes?: string | null
+          type: string
+        }
+        Update: {
+          content?: Json | null
+          id?: string
+          last_updated?: string | null
+          name?: string
+          notes?: string | null
+          type?: string
+        }
+        Relationships: []
+      }
+      parking_requirements: {
+        Row: {
+          county: string
+          created_at: string | null
+          id: string
+          parking_requirement: string
+          updated_at: string | null
+          use_type: string
+        }
+        Insert: {
+          county: string
+          created_at?: string | null
+          id?: string
+          parking_requirement: string
+          updated_at?: string | null
+          use_type: string
+        }
+        Update: {
+          county?: string
+          created_at?: string | null
+          id?: string
+          parking_requirement?: string
+          updated_at?: string | null
+          use_type?: string
+        }
+        Relationships: []
+      }
+      zoning_standards: {
+        Row: {
+          ada_stalls_required: string | null
+          county: string
+          created_at: string | null
+          front_setback: string | null
+          id: string
+          max_far: string | null
+          max_height: string | null
+          max_lot_coverage: string | null
+          parking_required: string | null
+          rear_setback: string | null
+          side_setback: string | null
+          updated_at: string | null
+          zoning_district: string
+        }
+        Insert: {
+          ada_stalls_required?: string | null
+          county: string
+          created_at?: string | null
+          front_setback?: string | null
+          id?: string
+          max_far?: string | null
+          max_height?: string | null
+          max_lot_coverage?: string | null
+          parking_required?: string | null
+          rear_setback?: string | null
+          side_setback?: string | null
+          updated_at?: string | null
+          zoning_district: string
+        }
+        Update: {
+          ada_stalls_required?: string | null
+          county?: string
+          created_at?: string | null
+          front_setback?: string | null
+          id?: string
+          max_far?: string | null
+          max_height?: string | null
+          max_lot_coverage?: string | null
+          parking_required?: string | null
+          rear_setback?: string | null
+          side_setback?: string | null
+          updated_at?: string | null
+          zoning_district?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
