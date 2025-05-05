@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -10,11 +11,10 @@ import SummaryStep from "@/components/SummaryStep";
 import WizardNav from "@/components/WizardNav";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { Settings } from "lucide-react";
+import { Settings, FileCode } from "lucide-react";
+
 const Index = () => {
-  const {
-    toast
-  } = useToast();
+  const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(0);
   const [stepCompletion, setStepCompletion] = useState<boolean[]>([false, false, false, false, false, false]);
   const [datasets, setDatasets] = useState<{
@@ -78,6 +78,7 @@ const Index = () => {
     shaftEnclosures: "",
     doorWindowRatings: ""
   });
+  
   const steps = ["Project Setup", "Zoning & Site", "Occupancy & Construction", "Life Safety / Egress", "Fire Ratings", "Summary"];
 
   // Handle project data changes
@@ -193,25 +194,32 @@ const Index = () => {
   const isStepComplete = (step: number) => {
     return stepCompletion[step];
   };
-  return <div className="min-h-screen bg-gray-50">
+  
+  return (
+    <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
         <header className="mb-8 text-center relative">
-          <h1 className="text-3xl font-bold text-primary">Code Sheet Generator</h1>
-          <p className="text-gray-600 mt-2">Generate code & zoning summaries for G-Sheets</p>
+          <div className="flex items-center justify-center mb-2">
+            <FileCode className="h-8 w-8 mr-2 text-primary" />
+            <h1 className="modern-heading text-primary">Code Sheet Generator</h1>
+          </div>
+          <p className="modern-subheading mt-2">Generate comprehensive code & zoning summaries for your projects</p>
           
-          <Link to="/dashboard" className="absolute right-0 top-0">
-            <Button variant="outline" size="sm" className="flex items-center">
-              <Settings className="h-4 w-4 mr-2" />
-              Data Dashboard
-            </Button>
-          </Link>
+          <div className="absolute right-0 top-0">
+            <Link to="/dashboard">
+              <Button variant="outline" size="sm" className="flex items-center gap-2">
+                <Settings className="h-4 w-4" />
+                Data Dashboard
+              </Button>
+            </Link>
+          </div>
         </header>
         
-        <Card className="max-w-5xl mx-auto">
-          <CardHeader>
+        <Card className="max-w-5xl mx-auto modern-card overflow-hidden">
+          <CardHeader className="bg-secondary/50 border-b">
             <CardTitle className="text-xl">{steps[currentStep]}</CardTitle>
           </CardHeader>
-          <CardContent className="pt-6">
+          <CardContent className="pt-8">
             {currentStep === 0 && <ProjectSetupStep projectData={projectData} onProjectDataChange={handleProjectDataChange} />}
             
             {currentStep === 1 && <ZoningInfoStep zoningData={zoningData} onZoningDataChange={handleZoningDataChange} jurisdiction={projectData.jurisdiction} onDatasetUploaded={handleDatasetUploaded} />}
@@ -233,10 +241,11 @@ const Index = () => {
           </CardContent>
         </Card>
         
-        <footer className="mt-8 text-center text-sm text-gray-500">
+        <footer className="mt-8 text-center text-sm text-muted-foreground">
           <p>Code Sheet Generator © 2025 - References IBC 2018/2021 and local zoning codes</p>
         </footer>
       </div>
-    </div>;
+    </div>
+  );
 };
 export default Index;
