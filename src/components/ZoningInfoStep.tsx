@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +10,7 @@ import { zoningDistricts, requiredDatasets } from "@/data/codeData";
 import { parseCSV, checkRequiredColumns, findZoningMatch, validateDatasetStructure, calculateADAParking, debugCSVContent } from "@/utils/CSVHelper";
 import { useToast } from "@/hooks/use-toast";
 import { normalizeCSVColumns, logColumnTransformation, supabase } from "@/integrations/supabase/client";
-import { Loader2 } from "lucide-react";
+import { Loader2, Check, AlertCircle } from "lucide-react";
 
 interface ZoningInfoStepProps {
   zoningData: {
@@ -59,6 +58,8 @@ const ZoningInfoStep = ({
   const [isLoading, setIsLoading] = useState(false);
   const [loadingZoningData, setLoadingZoningData] = useState(true);
   const [populatedFields, setPopulatedFields] = useState<string[]>([]);
+  const [populationAttempted, setPopulationAttempted] = useState(false);
+  const [lastPopulationSuccess, setLastPopulationSuccess] = useState(false);
   
   const filteredDistricts = zoningDistricts.filter(district => district.jurisdiction === jurisdiction);
 
@@ -74,6 +75,10 @@ const ZoningInfoStep = ({
         
         if (error) {
           console.error("Error fetching zoning data:", error);
+          setValidationMessage({
+            type: 'error',
+            message: `Failed to fetch zoning data: ${error.message}`
+          });
           return;
         }
         
@@ -86,9 +91,18 @@ const ZoningInfoStep = ({
             title: "Zoning Data Loaded",
             description: `${data.length} zoning standards loaded for ${jurisdiction}`
           });
+        } else {
+          setValidationMessage({
+            type: 'warning',
+            message: `No zoning data available for ${jurisdiction}. You'll need to manually fill in the fields or upload zoning data.`
+          });
         }
       } catch (err) {
         console.error("Failed to fetch zoning data:", err);
+        setValidationMessage({
+          type: 'error',
+          message: `Failed to fetch zoning data: ${err instanceof Error ? err.message : 'Unknown error'}`
+        });
       } finally {
         setLoadingZoningData(false);
       }
@@ -138,6 +152,8 @@ const ZoningInfoStep = ({
   // Function to populate zoning fields based on selected district
   const populateZoningFields = () => {
     setIsLoading(true);
+    setPopulationAttempted(true);
+    
     // Reset populated fields
     setPopulatedFields([]);
     
@@ -177,24 +193,26 @@ const ZoningInfoStep = ({
 
       // Set the populated fields for highlighting
       setPopulatedFields(newPopulatedFields);
+      setLastPopulationSuccess(true);
 
       // Show success message
       setValidationMessage({
         type: 'success',
-        message: 'Zoning data auto-populated successfully!'
+        message: `Zoning data for ${match.zoning_district || match.district} auto-populated successfully! ${newPopulatedFields.length} fields updated.`
       });
 
-      // Hide message after 3 seconds
+      // Hide message after 5 seconds
       setTimeout(() => {
         setValidationMessage({
           type: 'warning',
           message: ''
         });
-      }, 3000);
+      }, 5000);
     } else {
+      setLastPopulationSuccess(false);
       setValidationMessage({
         type: 'warning',
-        message: 'No matching zoning standards found for selected district.'
+        message: `No matching zoning standards found for selected district "${zoningData.zoningDistrict}" in ${jurisdiction}. Please fill in the fields manually or upload zoning data.`
       });
       
       setTimeout(() => {
@@ -202,7 +220,7 @@ const ZoningInfoStep = ({
           type: 'warning',
           message: ''
         });
-      }, 3000);
+      }, 5000);
     }
     
     setIsLoading(false);
@@ -470,7 +488,9 @@ const ZoningInfoStep = ({
         </Alert>}
       
       {validationMessage.message && <Alert className={`mb-4 ${validationMessage.type === 'success' ? 'bg-green-50 border-green-200' : validationMessage.type === 'error' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
-          <AlertDescription>
+          {validationMessage.type === 'success' && <Check className="h-4 w-4 text-green-500 mr-2" />}
+          {validationMessage.type === 'error' && <AlertCircle className="h-4 w-4 text-red-500 mr-2" />}
+          <AlertDescription className="flex items-center">
             {validationMessage.message}
           </AlertDescription>
         </Alert>}
@@ -532,7 +552,7 @@ const ZoningInfoStep = ({
                 type="button" 
                 variant="outline" 
                 size="sm" 
-                className="mt-2" 
+                className={`mt-2 ${populationAttempted && lastPopulationSuccess ? 'bg-green-50 border-green-300 hover:bg-green-100' : populationAttempted ? 'bg-amber-50 border-amber-300 hover:bg-amber-100' : ''}`}
                 onClick={populateZoningFields}
                 disabled={!zoningData.zoningDistrict || isLoading}
               >
@@ -540,6 +560,11 @@ const ZoningInfoStep = ({
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Applying...
+                  </>
+                ) : populationAttempted && lastPopulationSuccess ? (
+                  <>
+                    <Check className="mr-2 h-4 w-4 text-green-500" />
+                    Applied Successfully
                   </>
                 ) : (
                   'Apply Zoning Standards'
@@ -566,8 +591,11 @@ const ZoningInfoStep = ({
                       placeholder="Front, Side, Rear (e.g. 10,5,10)" 
                       value={zoningData.setbacks} 
                       onChange={e => onZoningDataChange("setbacks", e.target.value)} 
-                      className={isFieldPopulated("setbacks") ? "border-green-400 bg-green-50" : ""}
+                      className={isFieldPopulated("setbacks") ? "border-green-400 bg-green-50 transition-all duration-300" : ""}
                     />
+                    {isFieldPopulated("setbacks") && (
+                      <p className="text-xs text-green-600 mt-1">Auto-populated from zoning data</p>
+                    )}
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -590,8 +618,11 @@ const ZoningInfoStep = ({
                       placeholder="Enter FAR" 
                       value={zoningData.far} 
                       onChange={e => onZoningDataChange("far", e.target.value)}
-                      className={isFieldPopulated("far") ? "border-green-400 bg-green-50" : ""} 
+                      className={isFieldPopulated("far") ? "border-green-400 bg-green-50 transition-all duration-300" : ""} 
                     />
+                    {isFieldPopulated("far") && (
+                      <p className="text-xs text-green-600 mt-1">Auto-populated from zoning data</p>
+                    )}
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -611,8 +642,11 @@ const ZoningInfoStep = ({
               placeholder="Enter maximum height" 
               value={zoningData.maxHeight} 
               onChange={e => onZoningDataChange("maxHeight", e.target.value)} 
-              className={isFieldPopulated("maxHeight") ? "border-green-400 bg-green-50" : ""}
+              className={isFieldPopulated("maxHeight") ? "border-green-400 bg-green-50 transition-all duration-300" : ""}
             />
+            {isFieldPopulated("maxHeight") && (
+              <p className="text-xs text-green-600 mt-1">Auto-populated from zoning data</p>
+            )}
           </div>
           
           <div className="space-y-2">
@@ -625,8 +659,11 @@ const ZoningInfoStep = ({
               placeholder="Enter lot coverage percentage" 
               value={zoningData.lotCoverage} 
               onChange={e => onZoningDataChange("lotCoverage", e.target.value)} 
-              className={isFieldPopulated("lotCoverage") ? "border-green-400 bg-green-50" : ""}
+              className={isFieldPopulated("lotCoverage") ? "border-green-400 bg-green-50 transition-all duration-300" : ""}
             />
+            {isFieldPopulated("lotCoverage") && (
+              <p className="text-xs text-green-600 mt-1">Auto-populated from zoning data</p>
+            )}
           </div>
         </div>
         
@@ -640,8 +677,11 @@ const ZoningInfoStep = ({
               placeholder="Enter required parking spaces" 
               value={zoningData.parkingRequired} 
               onChange={e => onZoningDataChange("parkingRequired", e.target.value)} 
-              className={isFieldPopulated("parkingRequired") ? "border-green-400 bg-green-50" : ""}
+              className={isFieldPopulated("parkingRequired") ? "border-green-400 bg-green-50 transition-all duration-300" : ""}
             />
+            {isFieldPopulated("parkingRequired") && (
+              <p className="text-xs text-green-600 mt-1">Auto-populated from zoning data</p>
+            )}
           </div>
           
           <div className="space-y-2">
@@ -654,13 +694,16 @@ const ZoningInfoStep = ({
                   min="0" 
                   readOnly 
                   value={zoningData.adaParking} 
-                  className={`bg-gray-50 ${isFieldPopulated("adaParking") ? "border-green-400" : ""}`} 
+                  className={`bg-gray-50 ${isFieldPopulated("adaParking") ? "border-green-400 bg-green-50" : ""}`} 
                 />
               </TooltipTrigger>
               <TooltipContent>
                 <p>Automatically calculated based on total parking spaces</p>
               </TooltipContent>
             </Tooltip>
+            {isFieldPopulated("adaParking") && (
+              <p className="text-xs text-green-600 mt-1">Auto-calculated based on parking requirements</p>
+            )}
           </div>
         </div>
         

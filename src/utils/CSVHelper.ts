@@ -1,4 +1,3 @@
-
 export interface ParsedCSVData {
   data: any[];
   originalHeaders: string[];
@@ -292,19 +291,55 @@ export const findZoningMatch = (
     return undefined;
   }
   
-  return dataset.find((row: any) => {
+  // First try exact match
+  let match = dataset.find((row: any) => {
     // Check for county/jurisdiction match
     const countyMatches = 
       (row.county && row.county.toLowerCase() === jurisdiction.toLowerCase()) ||
       (row.jurisdiction && row.jurisdiction.toLowerCase() === jurisdiction.toLowerCase());
     
-    // Check for zoning district match
+    // Check for zoning district match (exact)
     const districtMatches = 
       (row.zoning_district && row.zoning_district.toLowerCase() === zoningDistrict.toLowerCase()) ||
       (row.district && row.district.toLowerCase() === zoningDistrict.toLowerCase());
     
     return countyMatches && districtMatches;
   });
+  
+  if (match) {
+    return match;
+  }
+  
+  // If no exact match, try partial match (frontend ID might be just "r-5" while database has "Residential (R-5)")
+  match = dataset.find((row: any) => {
+    // Check for county/jurisdiction match
+    const countyMatches = 
+      (row.county && row.county.toLowerCase() === jurisdiction.toLowerCase()) ||
+      (row.jurisdiction && row.jurisdiction.toLowerCase() === jurisdiction.toLowerCase());
+    
+    // Check for zoning district match (partial)
+    const zoning = row.zoning_district || row.district || "";
+    const normalizedDbZoning = zoning.toLowerCase().replace(/\s+/g, '');
+    const normalizedInputZoning = zoningDistrict.toLowerCase().replace(/\s+/g, '');
+    
+    // Try different matching strategies
+    const containsMatch = normalizedDbZoning.includes(normalizedInputZoning) || 
+                         normalizedInputZoning.includes(normalizedDbZoning);
+                         
+    // Try to match just the code part, like "r-5" in "Residential (R-5)"
+    const codeMatch = zoning.match(/\(([^)]+)\)/);
+    const codeMatchResult = codeMatch ? 
+                          codeMatch[1].toLowerCase().replace(/\s+/g, '') === normalizedInputZoning : 
+                          false;
+    
+    // Try to match with dashes removed (r5 vs r-5)
+    const noDashMatch = zoning.toLowerCase().replace(/[-\s]/g, '') === 
+                       zoningDistrict.toLowerCase().replace(/[-\s]/g, '');
+    
+    return countyMatches && (containsMatch || codeMatchResult || noDashMatch);
+  });
+  
+  return match;
 };
 
 /**
@@ -609,4 +644,3 @@ export const debugCSVContent = (fileContent: string): {
     firstFewRows
   };
 };
-
