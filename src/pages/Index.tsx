@@ -9,12 +9,13 @@ import LifeSafetyStep from "@/components/LifeSafetyStep";
 import FireRatingsStep from "@/components/FireRatingsStep";
 import SummaryStep from "@/components/SummaryStep";
 import WizardNav from "@/components/WizardNav";
-import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
-import { Settings, FileCode } from "lucide-react";
+import { FileCode } from "lucide-react";
+import { useProject } from "@/hooks/use-project";
 
 const Index = () => {
   const { toast } = useToast();
+  const { currentProject, updateProjectData } = useProject();
+  
   const [currentStep, setCurrentStep] = useState(0);
   const [stepCompletion, setStepCompletion] = useState<boolean[]>([false, false, false, false, false, false]);
   const [datasets, setDatasets] = useState<{
@@ -83,43 +84,85 @@ const Index = () => {
 
   // Handle project data changes
   const handleProjectDataChange = (field: string, value: string | boolean) => {
-    setProjectData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setProjectData(prev => {
+      const newData = {
+        ...prev,
+        [field]: value
+      };
+      updateProjectData("projectData", newData);
+      return newData;
+    });
   };
 
   // Handle zoning data changes
   const handleZoningDataChange = (field: string, value: string | boolean) => {
-    setZoningData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setZoningData(prev => {
+      const newData = {
+        ...prev,
+        [field]: value
+      };
+      updateProjectData("zoningData", newData);
+      return newData;
+    });
   };
 
   // Handle occupancy data changes
   const handleOccupancyDataChange = (field: string, value: any) => {
-    setOccupancyData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setOccupancyData(prev => {
+      const newData = {
+        ...prev,
+        [field]: value
+      };
+      updateProjectData("occupancyData", newData);
+      return newData;
+    });
   };
 
   // Handle life safety data changes
   const handleLifeSafetyDataChange = (field: string, value: string) => {
-    setLifeSafetyData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setLifeSafetyData(prev => {
+      const newData = {
+        ...prev,
+        [field]: value
+      };
+      updateProjectData("lifeSafetyData", newData);
+      return newData;
+    });
   };
 
   // Handle fire data changes
   const handleFireDataChange = (field: string, value: string) => {
-    setFireData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setFireData(prev => {
+      const newData = {
+        ...prev,
+        [field]: value
+      };
+      updateProjectData("fireData", newData);
+      return newData;
+    });
   };
+
+  // Load project data from context if available
+  useEffect(() => {
+    if (currentProject?.project_data) {
+      const { projectData: pd, zoningData: zd, occupancyData: od, lifeSafetyData: lsd, fireData: fd } = currentProject.project_data;
+      
+      if (pd) setProjectData(prev => ({ ...prev, ...pd }));
+      if (zd) setZoningData(prev => ({ ...prev, ...zd }));
+      if (od) setOccupancyData(prev => ({ ...prev, ...od }));
+      if (lsd) setLifeSafetyData(prev => ({ ...prev, ...lsd }));
+      if (fd) setFireData(prev => ({ ...prev, ...fd }));
+      
+      // Set project name from current project
+      if (currentProject.name && !pd?.projectName) {
+        setProjectData(prev => {
+          const newData = { ...prev, projectName: currentProject.name };
+          updateProjectData("projectData", newData);
+          return newData;
+        });
+      }
+    }
+  }, [currentProject]);
 
   // Handle dataset uploads
   const handleDatasetUploaded = (datasetType: string, data: any[]) => {
@@ -206,12 +249,11 @@ const Index = () => {
           <p className="modern-subheading mt-2">Generate comprehensive code & zoning summaries for your projects</p>
           
           <div className="absolute right-0 top-0">
-            <Link to="/dashboard">
-              <Button variant="outline" size="sm" className="flex items-center gap-2">
-                <Settings className="h-4 w-4" />
-                Data Dashboard
-              </Button>
-            </Link>
+            {currentProject && (
+              <div className="text-sm text-muted-foreground">
+                Working on: <span className="font-medium">{currentProject.name}</span>
+              </div>
+            )}
           </div>
         </header>
         

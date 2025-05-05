@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect } from 'react';
+import { useProject } from '@/hooks/use-project';
 import { Link } from "react-router-dom";
 import { 
   Card, 
@@ -59,6 +60,14 @@ interface ColumnConfig {
 
 const Dashboard = () => {
   const { toast } = useToast();
+  const { currentProject } = useProject();
+  
+  // Update page title based on current project
+  useEffect(() => {
+    document.title = currentProject ? 
+      `Dashboard - ${currentProject.name}` : 
+      'Data Dashboard';
+  }, [currentProject]);
   
   // Datasets state
   const [datasets, setDatasets] = useState<Record<string, DatasetInfo>>({
@@ -559,321 +568,326 @@ const Dashboard = () => {
   };
   
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        <header className="mb-8 flex justify-between items-center">
+    <div className="container mx-auto py-8 px-4">
+      <header className="mb-8">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-primary">Data Dashboard</h1>
-            <p className="text-gray-600 mt-1">Manage CSV datasets for the Hawaii Code Wizard</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => setDebugMode(!debugMode)}
-              className="flex items-center gap-1"
-            >
-              <Info className="w-4 h-4" />
-              {debugMode ? 'Hide Debug' : 'Show Debug'}
-            </Button>
-            <Link to="/">
-              <Button variant="outline" className="flex items-center gap-2">
-                <ArrowLeft className="w-4 h-4" /> 
-                Back to Wizard
-              </Button>
-            </Link>
-          </div>
-        </header>
-        
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>CSV Management</CardTitle>
-            <CardDescription>
-              Upload and manage CSV files for zoning, parking, and ADA requirements
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {debugMode && (
-              <Alert className="mb-6 bg-blue-50 border-blue-200">
-                <AlertTitle className="text-blue-800 flex items-center gap-2">
-                  <Info className="w-4 h-4" />
-                  CSV Column Mapping Guidelines
-                </AlertTitle>
-                <AlertDescription className="text-blue-700">
-                  <p className="mb-2">Your CSV file's column names must match these formats:</p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <strong>Zoning Standards:</strong>
-                      <ul className="list-disc ml-5">
-                        <li>county</li>
-                        <li>zoning_district</li>
-                        <li>front_setback</li>
-                        <li>side_setback</li>
-                        <li>rear_setback</li>
-                        <li>max_far</li>
-                        <li>max_height</li>
-                        <li>max_lot_coverage</li>
-                        <li>parking_required</li>
-                        <li>ada_stalls_required</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <strong>Parking Requirements:</strong>
-                      <ul className="list-disc ml-5">
-                        <li>county</li>
-                        <li>use_type</li>
-                        <li>parking_requirement</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <strong>ADA Requirements:</strong>
-                      <ul className="list-disc ml-5">
-                        <li>total_parking_spaces_provided</li>
-                        <li>minimum_required_ada_stalls</li>
-                      </ul>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-xs">Note: The app will try to normalize column names, but it's best to match these exactly.</p>
-                </AlertDescription>
-              </Alert>
+            <h1 className="text-3xl font-bold">Data Dashboard</h1>
+            {currentProject && (
+              <p className="text-muted-foreground mt-1">
+                Project: {currentProject.name}
+              </p>
             )}
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => setDebugMode(!debugMode)}
+            className="flex items-center gap-1"
+          >
+            <Info className="w-4 h-4" />
+            {debugMode ? 'Hide Debug' : 'Show Debug'}
+          </Button>
+          <Link to="/">
+            <Button variant="outline" className="flex items-center gap-2">
+              <ArrowLeft className="w-4 h-4" /> 
+              Back to Wizard
+            </Button>
+          </Link>
+        </div>
+      </header>
+      
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>CSV Management</CardTitle>
+          <CardDescription>
+            Upload and manage CSV files for zoning, parking, and ADA requirements
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {debugMode && (
+            <Alert className="mb-6 bg-blue-50 border-blue-200">
+              <AlertTitle className="text-blue-800 flex items-center gap-2">
+                <Info className="w-4 h-4" />
+                CSV Column Mapping Guidelines
+              </AlertTitle>
+              <AlertDescription className="text-blue-700">
+                <p className="mb-2">Your CSV file's column names must match these formats:</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <strong>Zoning Standards:</strong>
+                    <ul className="list-disc ml-5">
+                      <li>county</li>
+                      <li>zoning_district</li>
+                      <li>front_setback</li>
+                      <li>side_setback</li>
+                      <li>rear_setback</li>
+                      <li>max_far</li>
+                      <li>max_height</li>
+                      <li>max_lot_coverage</li>
+                      <li>parking_required</li>
+                      <li>ada_stalls_required</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <strong>Parking Requirements:</strong>
+                    <ul className="list-disc ml-5">
+                      <li>county</li>
+                      <li>use_type</li>
+                      <li>parking_requirement</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <strong>ADA Requirements:</strong>
+                    <ul className="list-disc ml-5">
+                      <li>total_parking_spaces_provided</li>
+                      <li>minimum_required_ada_stalls</li>
+                    </ul>
+                  </div>
+                </div>
+                <p className="mt-2 text-xs">Note: The app will try to normalize column names, but it's best to match these exactly.</p>
+              </AlertDescription>
+            </Alert>
+          )}
           
-            <div className="grid md:grid-cols-3 gap-6">
-              {/* Zoning Standards Upload */}
-              <div className="space-y-2">
-                <Label htmlFor="zoning-upload">Zoning Standards</Label>
-                <div className="flex gap-2">
-                  <Input 
-                    id="zoning-upload" 
-                    ref={zoningInputRef}
-                    type="file" 
-                    accept=".csv"
-                    onChange={(e) => handleFileUpload(e, 'zoning')}
-                  />
-                  {datasets.zoning.status === 'loaded' && (
-                    <Badge className="bg-green-500">
-                      <CheckCircle2 className="w-3 h-3 mr-1" /> Loaded
-                    </Badge>
-                  )}
-                  {datasets.zoning.status === 'missing' && (
-                    <Badge variant="destructive">
-                      <X className="w-3 h-3 mr-1" /> Missing
-                    </Badge>
-                  )}
-                  {datasets.zoning.status === 'uploading' && (
-                    <Badge variant="outline">
-                      <span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent text-primary rounded-full mr-1" />
-                      Uploading
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              
-              {/* Parking Requirements Upload */}
-              <div className="space-y-2">
-                <Label htmlFor="parking-upload">Parking Requirements</Label>
-                <div className="flex gap-2">
-                  <Input 
-                    id="parking-upload" 
-                    ref={parkingInputRef}
-                    type="file" 
-                    accept=".csv"
-                    onChange={(e) => handleFileUpload(e, 'parking')}
-                  />
-                  {datasets.parking.status === 'loaded' && (
-                    <Badge className="bg-green-500">
-                      <CheckCircle2 className="w-3 h-3 mr-1" /> Loaded
-                    </Badge>
-                  )}
-                  {datasets.parking.status === 'missing' && (
-                    <Badge variant="destructive">
-                      <X className="w-3 h-3 mr-1" /> Missing
-                    </Badge>
-                  )}
-                  {datasets.parking.status === 'uploading' && (
-                    <Badge variant="outline">
-                      <span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent text-primary rounded-full mr-1" />
-                      Uploading
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              
-              {/* ADA Requirements Upload */}
-              <div className="space-y-2">
-                <Label htmlFor="ada-upload">ADA Requirements</Label>
-                <div className="flex gap-2">
-                  <Input 
-                    id="ada-upload" 
-                    ref={adaInputRef}
-                    type="file" 
-                    accept=".csv"
-                    onChange={(e) => handleFileUpload(e, 'ada')}
-                  />
-                  {datasets.ada.status === 'loaded' && (
-                    <Badge className="bg-green-500">
-                      <CheckCircle2 className="w-3 h-3 mr-1" /> Loaded
-                    </Badge>
-                  )}
-                  {datasets.ada.status === 'missing' && (
-                    <Badge variant="destructive">
-                      <X className="w-3 h-3 mr-1" /> Missing
-                    </Badge>
-                  )}
-                  {datasets.ada.status === 'uploading' && (
-                    <Badge variant="outline">
-                      <span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent text-primary rounded-full mr-1" />
-                      Uploading
-                    </Badge>
-                  )}
-                </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {/* Zoning Standards Upload */}
+            <div className="space-y-2">
+              <Label htmlFor="zoning-upload">Zoning Standards</Label>
+              <div className="flex gap-2">
+                <Input 
+                  id="zoning-upload" 
+                  ref={zoningInputRef}
+                  type="file" 
+                  accept=".csv"
+                  onChange={(e) => handleFileUpload(e, 'zoning')}
+                />
+                {datasets.zoning.status === 'loaded' && (
+                  <Badge className="bg-green-500">
+                    <CheckCircle2 className="w-3 h-3 mr-1" /> Loaded
+                  </Badge>
+                )}
+                {datasets.zoning.status === 'missing' && (
+                  <Badge variant="destructive">
+                    <X className="w-3 h-3 mr-1" /> Missing
+                  </Badge>
+                )}
+                {datasets.zoning.status === 'uploading' && (
+                  <Badge variant="outline">
+                    <span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent text-primary rounded-full mr-1" />
+                    Uploading
+                  </Badge>
+                )}
               </div>
             </div>
             
-            {/* Missing Files Warning */}
-            {(datasets.zoning.status === 'missing' || 
-              datasets.parking.status === 'missing' || 
-              datasets.ada.status === 'missing') && (
-              <Alert variant="destructive" className="mt-6">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Missing Required Files</AlertTitle>
-                <AlertDescription>
-                  Some required data files are missing. The wizard may not function correctly until all files are uploaded.
-                </AlertDescription>
-              </Alert>
-            )}
-            
-            {/* Debug Information */}
-            {debugMode && debugInfo && (
-              <div className="mt-6 bg-gray-50 border rounded-md p-4">
-                <h3 className="text-sm font-medium mb-2">CSV Debug Information</h3>
-                <div className="text-xs max-h-64 overflow-y-auto">
-                  <p className="font-medium">Summary: {debugInfo.summary}</p>
-                  <p className="mt-1">First Row:</p>
-                  <pre className="bg-gray-100 p-2 rounded overflow-x-auto">{debugInfo.firstRow}</pre>
-                  
-                  <p className="mt-2">First Few Rows:</p>
-                  <pre className="bg-gray-100 p-2 rounded overflow-x-auto">{JSON.stringify(debugInfo.firstFewRows, null, 2)}</pre>
-                </div>
+            {/* Parking Requirements Upload */}
+            <div className="space-y-2">
+              <Label htmlFor="parking-upload">Parking Requirements</Label>
+              <div className="flex gap-2">
+                <Input 
+                  id="parking-upload" 
+                  ref={parkingInputRef}
+                  type="file" 
+                  accept=".csv"
+                  onChange={(e) => handleFileUpload(e, 'parking')}
+                />
+                {datasets.parking.status === 'loaded' && (
+                  <Badge className="bg-green-500">
+                    <CheckCircle2 className="w-3 h-3 mr-1" /> Loaded
+                  </Badge>
+                )}
+                {datasets.parking.status === 'missing' && (
+                  <Badge variant="destructive">
+                    <X className="w-3 h-3 mr-1" /> Missing
+                  </Badge>
+                )}
+                {datasets.parking.status === 'uploading' && (
+                  <Badge variant="outline">
+                    <span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent text-primary rounded-full mr-1" />
+                    Uploading
+                  </Badge>
+                )}
               </div>
-            )}
-          </CardContent>
-        </Card>
-        
-        {/* Tabbed Data Tables */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Data Tables</CardTitle>
-            <CardDescription>
-              View and edit data for each category
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-3 mb-8">
-                <TabsTrigger value="zoning">Zoning Standards</TabsTrigger>
-                <TabsTrigger value="parking">Parking Requirements</TabsTrigger>
-                <TabsTrigger value="ada">ADA Requirements</TabsTrigger>
-              </TabsList>
-              
-              {['zoning', 'parking', 'ada'].map(datasetKey => (
-                <TabsContent key={datasetKey} value={datasetKey} className="space-y-6">
-                  {/* Dataset Info and Controls */}
-                  <div className="flex flex-col md:flex-row justify-between mb-6 gap-4">
-                    <div className="space-y-2">
-                      <h3 className="text-lg font-medium">{datasets[datasetKey as keyof typeof datasets].name}</h3>
-                      {datasets[datasetKey as keyof typeof datasets].lastUpdated && (
-                        <p className="text-sm text-gray-500">
-                          Last updated: {new Date(datasets[datasetKey as keyof typeof datasets].lastUpdated as string).toLocaleString()}
-                        </p>
-                      )}
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <Button onClick={() => handleAddRow(datasetKey)} size="sm" className="flex items-center gap-1">
-                        <Plus className="w-4 h-4" /> Add Row
-                      </Button>
-                      <Button onClick={() => handleSaveData(datasetKey)} size="sm" className="flex items-center gap-1">
-                        <Upload className="w-4 h-4" /> Save Changes
-                      </Button>
-                      <Button 
-                        onClick={() => handleDownloadCSV(datasetKey)} 
-                        variant="outline" 
-                        size="sm"
-                        disabled={!datasets[datasetKey as keyof typeof datasets].data}
-                        className="flex items-center gap-1"
-                      >
-                        <Download className="w-4 h-4" /> Download CSV
-                      </Button>
-                    </div>
+            </div>
+            
+            {/* ADA Requirements Upload */}
+            <div className="space-y-2">
+              <Label htmlFor="ada-upload">ADA Requirements</Label>
+              <div className="flex gap-2">
+                <Input 
+                  id="ada-upload" 
+                  ref={adaInputRef}
+                  type="file" 
+                  accept=".csv"
+                  onChange={(e) => handleFileUpload(e, 'ada')}
+                />
+                {datasets.ada.status === 'loaded' && (
+                  <Badge className="bg-green-500">
+                    <CheckCircle2 className="w-3 h-3 mr-1" /> Loaded
+                  </Badge>
+                )}
+                {datasets.ada.status === 'missing' && (
+                  <Badge variant="destructive">
+                    <X className="w-3 h-3 mr-1" /> Missing
+                  </Badge>
+                )}
+                {datasets.ada.status === 'uploading' && (
+                  <Badge variant="outline">
+                    <span className="animate-spin inline-block w-3 h-3 border-2 border-current border-t-transparent text-primary rounded-full mr-1" />
+                    Uploading
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          {/* Missing Files Warning */}
+          {(datasets.zoning.status === 'missing' || 
+            datasets.parking.status === 'missing' || 
+            datasets.ada.status === 'missing') && (
+            <Alert variant="destructive" className="mt-6">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Missing Required Files</AlertTitle>
+              <AlertDescription>
+                Some required data files are missing. The wizard may not function correctly until all files are uploaded.
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {/* Debug Information */}
+          {debugMode && debugInfo && (
+            <div className="mt-6 bg-gray-50 border rounded-md p-4">
+              <h3 className="text-sm font-medium mb-2">CSV Debug Information</h3>
+              <div className="text-xs max-h-64 overflow-y-auto">
+                <p className="font-medium">Summary: {debugInfo.summary}</p>
+                <p className="mt-1">First Row:</p>
+                <pre className="bg-gray-100 p-2 rounded overflow-x-auto">{debugInfo.firstRow}</pre>
+                
+                <p className="mt-2">First Few Rows:</p>
+                <pre className="bg-gray-100 p-2 rounded overflow-x-auto">{JSON.stringify(debugInfo.firstFewRows, null, 2)}</pre>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      
+      {/* Tabbed Data Tables */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Data Tables</CardTitle>
+          <CardDescription>
+            View and edit data for each category
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-3 mb-8">
+              <TabsTrigger value="zoning">Zoning Standards</TabsTrigger>
+              <TabsTrigger value="parking">Parking Requirements</TabsTrigger>
+              <TabsTrigger value="ada">ADA Requirements</TabsTrigger>
+            </TabsList>
+            
+            {['zoning', 'parking', 'ada'].map(datasetKey => (
+              <TabsContent key={datasetKey} value={datasetKey} className="space-y-6">
+                {/* Dataset Info and Controls */}
+                <div className="flex flex-col md:flex-row justify-between mb-6 gap-4">
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-medium">{datasets[datasetKey as keyof typeof datasets].name}</h3>
+                    {datasets[datasetKey as keyof typeof datasets].lastUpdated && (
+                      <p className="text-sm text-gray-500">
+                        Last updated: {new Date(datasets[datasetKey as keyof typeof datasets].lastUpdated as string).toLocaleString()}
+                      </p>
+                    )}
                   </div>
                   
-                  {/* Search and Filter */}
-                  <div className="relative mb-4">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-                    <Input
-                      placeholder="Search data..."
-                      value={filters[datasetKey as keyof typeof filters]}
-                      onChange={(e) => setFilters(prev => ({...prev, [datasetKey]: e.target.value}))}
-                      className="pl-9"
-                    />
+                  <div className="flex gap-2">
+                    <Button onClick={() => handleAddRow(datasetKey)} size="sm" className="flex items-center gap-1">
+                      <Plus className="w-4 h-4" /> Add Row
+                    </Button>
+                    <Button onClick={() => handleSaveData(datasetKey)} size="sm" className="flex items-center gap-1">
+                      <Upload className="w-4 h-4" /> Save Changes
+                    </Button>
+                    <Button 
+                      onClick={() => handleDownloadCSV(datasetKey)} 
+                      variant="outline" 
+                      size="sm"
+                      disabled={!datasets[datasetKey as keyof typeof datasets].data}
+                      className="flex items-center gap-1"
+                    >
+                      <Download className="w-4 h-4" /> Download CSV
+                    </Button>
                   </div>
-                  
-                  {/* Data Table */}
-                  {datasets[datasetKey as keyof typeof datasets].data ? (
-                    <div className="overflow-x-auto border rounded-md">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
+                </div>
+                
+                {/* Search and Filter */}
+                <div className="relative mb-4">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+                  <Input
+                    placeholder="Search data..."
+                    value={filters[datasetKey as keyof typeof filters]}
+                    onChange={(e) => setFilters(prev => ({...prev, [datasetKey]: e.target.value}))}
+                    className="pl-9"
+                  />
+                </div>
+                
+                {/* Data Table */}
+                {datasets[datasetKey as keyof typeof datasets].data ? (
+                  <div className="overflow-x-auto border rounded-md">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          {columnConfigs[datasetKey].map((column) => (
+                            <TableHead key={column.accessorKey}>{column.header}</TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {getFilteredData(datasetKey).map((row, rowIndex) => (
+                          <TableRow key={rowIndex}>
                             {columnConfigs[datasetKey].map((column) => (
-                              <TableHead key={column.accessorKey}>{column.header}</TableHead>
+                              <TableCell key={column.accessorKey}>
+                                <Input
+                                  value={row[column.accessorKey] || ''}
+                                  onChange={(e) => handleCellEdit(
+                                    datasetKey, 
+                                    rowIndex, 
+                                    column.accessorKey, 
+                                    e.target.value
+                                  )}
+                                />
+                              </TableCell>
                             ))}
                           </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {getFilteredData(datasetKey).map((row, rowIndex) => (
-                            <TableRow key={rowIndex}>
-                              {columnConfigs[datasetKey].map((column) => (
-                                <TableCell key={column.accessorKey}>
-                                  <Input
-                                    value={row[column.accessorKey] || ''}
-                                    onChange={(e) => handleCellEdit(
-                                      datasetKey, 
-                                      rowIndex, 
-                                      column.accessorKey, 
-                                      e.target.value
-                                    )}
-                                  />
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  ) : (
-                    <div className="text-center py-12 border rounded-md bg-gray-50">
-                      <p className="text-gray-500">No data available. Please upload a CSV file.</p>
-                    </div>
-                  )}
-                  
-                  {/* Notes Section */}
-                  <div className="mt-6">
-                    <Label htmlFor={`${datasetKey}-notes`}>Notes</Label>
-                    <Textarea
-                      id={`${datasetKey}-notes`}
-                      placeholder="Add notes about this dataset..."
-                      value={datasets[datasetKey as keyof typeof datasets].notes}
-                      onChange={(e) => handleNotesChange(datasetKey, e.target.value)}
-                      className="min-h-[100px]"
-                    />
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
-                </TabsContent>
-              ))}
-            </Tabs>
-          </CardContent>
-        </Card>
-      </div>
+                ) : (
+                  <div className="text-center py-12 border rounded-md bg-gray-50">
+                    <p className="text-gray-500">No data available. Please upload a CSV file.</p>
+                  </div>
+                )}
+                
+                {/* Notes Section */}
+                <div className="mt-6">
+                  <Label htmlFor={`${datasetKey}-notes`}>Notes</Label>
+                  <Textarea
+                    id={`${datasetKey}-notes`}
+                    placeholder="Add notes about this dataset..."
+                    value={datasets[datasetKey as keyof typeof datasets].notes}
+                    onChange={(e) => handleNotesChange(datasetKey, e.target.value)}
+                    className="min-h-[100px]"
+                  />
+                </div>
+              </TabsContent>
+            ))}
+          </Tabs>
+        </CardContent>
+      </Card>
     </div>
   );
 };
