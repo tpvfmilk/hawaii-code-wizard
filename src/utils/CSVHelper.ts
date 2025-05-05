@@ -1,3 +1,4 @@
+
 export interface ParsedCSVData {
   data: any[];
   originalHeaders: string[];
@@ -17,8 +18,11 @@ export const parseCSV = (text: string): ParsedCSVData => {
       throw new Error("Invalid CSV: empty or non-string input");
     }
     
-    // Split text into rows
-    const rows = text.split(/\r?\n/).filter(row => row.trim() !== '');
+    // Normalize line endings for consistent processing
+    const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
+    // Split text into rows and filter out empty rows
+    const rows = normalizedText.split('\n').filter(row => row.trim() !== '');
     
     if (rows.length === 0) {
       console.error("CSV Parser: No rows found in CSV");
@@ -33,6 +37,8 @@ export const parseCSV = (text: string): ParsedCSVData => {
       throw new Error("Invalid CSV: no headers found");
     }
     
+    console.log("CSV Parser: Headers found", originalHeaders);
+    
     // Create normalized headers for consistent access
     const normalizedHeaders = originalHeaders.map(header => 
       header.toLowerCase().replace(/[^a-z0-9]/g, '_')
@@ -46,7 +52,12 @@ export const parseCSV = (text: string): ParsedCSVData => {
       try {
         const values = parseCSVRow(rows[i]);
         
-        // Create object with both original and normalized headers
+        if (values.length === 0) {
+          console.warn(`CSV Parser: Empty values array for row ${i + 1}, skipping`);
+          continue;
+        }
+        
+        // Create object with normalized headers
         const rowObj: any = {};
         normalizedHeaders.forEach((header, index) => {
           if (index < values.length) {
@@ -60,7 +71,8 @@ export const parseCSV = (text: string): ParsedCSVData => {
         originalHeaders.forEach((header, index) => {
           if (index < values.length) {
             // Only add if different from normalized
-            if (header.toLowerCase().replace(/[^a-z0-9]/g, '_') !== header) {
+            const normalizedKey = header.toLowerCase().replace(/[^a-z0-9]/g, '_');
+            if (normalizedKey !== header) {
               rowObj[header] = parseValue(values[index]);
             }
           }
@@ -69,18 +81,23 @@ export const parseCSV = (text: string): ParsedCSVData => {
         data.push(rowObj);
       } catch (err) {
         console.error(`CSV Parser: Error parsing row ${i + 1}:`, err);
+        console.error(`CSV Parser: Row content: "${rows[i]}"`);
         // Continue parsing other rows instead of failing completely
       }
     }
     
     if (data.length === 0) {
       console.warn("CSV Parser: No data rows found in CSV");
+      throw new Error("No data rows found in CSV file");
     }
+    
+    console.log(`CSV Parser: Successfully parsed ${data.length} data rows`);
     
     return { data, originalHeaders, normalizedHeaders };
   } catch (err) {
     console.error("CSV Parser: Fatal error parsing CSV:", err);
-    throw new Error(`Failed to process CSV file: ${err.message}`);
+    console.error("CSV Parser: First 100 chars of input:", text.substring(0, 100));
+    throw new Error(`Failed to process CSV file: ${err.message || 'Unknown error'}`);
   }
 };
 
@@ -213,6 +230,7 @@ export const downloadAsCSV = (data: any[], filename: string): void => {
  * @returns Cleaned string value
  */
 export const cleanValue = (value: string): string => {
+  if (!value) return '';
   return value.replace(/^"|"$/g, '').trim();
 };
 
@@ -553,3 +571,42 @@ export const validateDatasetStructure = (
     missingColumns: []
   };
 };
+
+/**
+ * Debug CSV content to help with parsing issues
+ * @param fileContent Raw CSV file content
+ * @returns Summary of CSV structure
+ */
+export const debugCSVContent = (fileContent: string): { 
+  summary: string;
+  firstRow: string;
+  charCodes: number[];
+  firstFewRows: string[];
+} => {
+  if (!fileContent) {
+    return {
+      summary: "Empty content",
+      firstRow: "",
+      charCodes: [],
+      firstFewRows: []
+    };
+  }
+  
+  const normalizedText = fileContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const rows = normalizedText.split('\n').filter(row => row.trim() !== '');
+  const firstRow = rows.length > 0 ? rows[0] : '';
+  
+  // Get char codes for the first row to debug invisible characters
+  const charCodes = firstRow.split('').map(char => char.charCodeAt(0));
+  
+  // Get first few rows
+  const firstFewRows = rows.slice(0, Math.min(3, rows.length));
+  
+  return {
+    summary: `File has ${rows.length} non-empty rows. First row length: ${firstRow.length} chars.`,
+    firstRow,
+    charCodes,
+    firstFewRows
+  };
+};
+

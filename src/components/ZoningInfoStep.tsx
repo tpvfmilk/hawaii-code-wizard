@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +19,8 @@ import {
   checkRequiredColumns, 
   findZoningMatch,
   validateDatasetStructure,
-  calculateADAParking
+  calculateADAParking,
+  debugCSVContent
 } from "@/utils/CSVHelper";
 import { useToast } from "@/hooks/use-toast";
 
@@ -58,6 +60,8 @@ const ZoningInfoStep = ({
   const [showPreview, setShowPreview] = useState(false);
   const [adaDataset, setAdaDataset] = useState<any[]>([]);
   const [zoningDataset, setZoningDataset] = useState<any[]>([]);
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
   
   const filteredDistricts = zoningDistricts.filter(
     district => district.jurisdiction === jurisdiction
@@ -103,15 +107,37 @@ const ZoningInfoStep = ({
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    // Check file type
+    if (file.type !== 'text/csv' && !file.name.toLowerCase().endsWith('.csv')) {
+      toast({
+        title: "Invalid File Type",
+        description: "Please upload a CSV file.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const reader = new FileReader();
+    
     reader.onload = (event) => {
       try {
         if (!event.target?.result) {
           throw new Error("Failed to read file");
         }
         
-        const result = parseCSV(event.target.result as string);
+        const fileContent = event.target.result as string;
+        
+        // Create debug information first
+        const debug = debugCSVContent(fileContent);
+        setDebugInfo(debug);
+        
+        console.log("CSV Upload: Processing file", file.name);
+        console.log("CSV Upload: File size", file.size, "bytes");
+        console.log("CSV Upload: Debug info", debug);
+        
+        // Now try to parse
+        const result = parseCSV(fileContent);
         const { data } = result;
         
         if (!data || data.length === 0) {
@@ -180,14 +206,19 @@ const ZoningInfoStep = ({
       } catch (error) {
         console.error("Error parsing CSV:", error);
         setShowZoningAlert(true);
+        const errorMessage = error instanceof Error ? error.message : 'Error parsing CSV file. Please check the format.';
+        
         setValidationMessage({ 
           type: 'error', 
-          message: error instanceof Error ? error.message : 'Error parsing CSV file. Please check the format.' 
+          message: errorMessage
         });
+        
+        // Show debug button since there was an error
+        setShowDebugInfo(true);
         
         toast({
           title: "Upload Error",
-          description: error instanceof Error ? error.message : 'Error parsing CSV file. Please check the format.',
+          description: errorMessage,
           variant: "destructive",
         });
       }
@@ -213,6 +244,16 @@ const ZoningInfoStep = ({
   const handleADAFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    // Check file type
+    if (file.type !== 'text/csv' && !file.name.toLowerCase().endsWith('.csv')) {
+      toast({
+        title: "Invalid File Type",
+        description: "Please upload a CSV file.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -221,7 +262,13 @@ const ZoningInfoStep = ({
           throw new Error("Failed to read file");
         }
         
-        const result = parseCSV(event.target.result as string);
+        const fileContent = event.target.result as string;
+        
+        // Create debug information
+        const debug = debugCSVContent(fileContent);
+        console.log("ADA CSV Upload: Debug info", debug);
+        
+        const result = parseCSV(fileContent);
         const { data } = result;
         
         if (!data || data.length === 0) {
@@ -265,15 +312,17 @@ const ZoningInfoStep = ({
           console.error("CSV validation failed:", validation.message);
         }
       } catch (error) {
-        console.error("Error parsing CSV:", error);
+        console.error("Error parsing ADA CSV:", error);
+        const errorMessage = error instanceof Error ? error.message : 'Error parsing CSV file. Please check the format.';
+        
         setValidationMessage({ 
           type: 'error', 
-          message: error instanceof Error ? error.message : 'Error parsing CSV file. Please check the format.' 
+          message: errorMessage 
         });
         
         toast({
           title: "Upload Error",
-          description: error instanceof Error ? error.message : 'Error parsing CSV file. Please check the format.',
+          description: errorMessage,
           variant: "destructive",
         });
       }
@@ -344,6 +393,23 @@ const ZoningInfoStep = ({
           </div>
           <Button variant="ghost" size="sm" className="mt-1" onClick={() => setShowPreview(false)}>
             Hide Preview
+          </Button>
+        </div>
+      )}
+      
+      {showDebugInfo && debugInfo && (
+        <div className="mb-4 overflow-auto bg-gray-50 p-3 rounded border">
+          <h3 className="text-sm font-medium mb-2">CSV Debug Info:</h3>
+          <div className="text-xs max-h-48 overflow-y-auto">
+            <p className="font-semibold">Summary: {debugInfo.summary}</p>
+            <p className="mt-1">First Row: "{debugInfo.firstRow}"</p>
+            <p className="mt-1">Character Codes:</p>
+            <pre className="bg-gray-100 p-1 mt-1">{JSON.stringify(debugInfo.charCodes)}</pre>
+            <p className="mt-1">First Few Rows:</p>
+            <pre className="bg-gray-100 p-1 mt-1">{JSON.stringify(debugInfo.firstFewRows, null, 2)}</pre>
+          </div>
+          <Button variant="ghost" size="sm" className="mt-1" onClick={() => setShowDebugInfo(false)}>
+            Hide Debug Info
           </Button>
         </div>
       )}
@@ -533,7 +599,7 @@ const ZoningInfoStep = ({
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
-          <div className="file-upload-area">
+          <div className="file-upload-area border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-primary transition-colors">
             <label htmlFor="zoningCsvUpload" className="cursor-pointer">
               <div className="text-center">
                 <p className="text-sm font-medium mb-1">Upload zoning data</p>
@@ -549,7 +615,7 @@ const ZoningInfoStep = ({
             </label>
           </div>
           
-          <div className="file-upload-area">
+          <div className="file-upload-area border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-primary transition-colors">
             <label htmlFor="adaCsvUpload" className="cursor-pointer">
               <div className="text-center">
                 <p className="text-sm font-medium mb-1">Upload ADA requirements</p>
@@ -571,3 +637,4 @@ const ZoningInfoStep = ({
 }
 
 export default ZoningInfoStep;
+

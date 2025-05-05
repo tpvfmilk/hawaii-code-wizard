@@ -4,8 +4,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import { requiredDatasets } from "@/data/codeData";
-import { parseCSV, checkRequiredColumns } from "@/utils/CSVHelper";
+import { parseCSV, validateDatasetStructure, debugCSVContent } from "@/utils/CSVHelper";
+import { useToast } from "@/hooks/use-toast";
 
 interface FireRatingsStepProps {
   fireData: {
@@ -27,27 +29,109 @@ const FireRatingsStep = ({
   constructionType
 }: FireRatingsStepProps) => {
   const [showFireAlert, setShowFireAlert] = useState(false);
+  const [validationMessage, setValidationMessage] = useState<{type: 'success' | 'error' | 'warning'; message: string}>({ 
+    type: 'warning', 
+    message: '' 
+  });
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const { toast } = useToast();
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Check file type
+    if (file.type !== 'text/csv' && !file.name.toLowerCase().endsWith('.csv')) {
+      toast({
+        title: "Invalid File Type",
+        description: "Please upload a CSV file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const csvData = parseCSV(event.target?.result as string);
+        if (!event.target?.result) {
+          throw new Error("Failed to read file");
+        }
         
-        if (checkRequiredColumns(csvData, requiredDatasets.fireRatings.requiredColumns)) {
-          onDatasetUploaded("fireRatings", csvData.data);
+        const fileContent = event.target.result as string;
+        
+        // Create debug information
+        const debug = debugCSVContent(fileContent);
+        setDebugInfo(debug);
+        console.log("Fire Ratings CSV Upload: Debug info", debug);
+        
+        // Parse CSV
+        const result = parseCSV(fileContent);
+        
+        // Validate dataset structure
+        const validation = validateDatasetStructure(result, "fireRatings");
+        
+        if (validation.valid) {
+          onDatasetUploaded("fireRatings", result.data);
           setShowFireAlert(false);
+          setValidationMessage({ 
+            type: 'success', 
+            message: `Successfully uploaded ${result.data.length} fire rating records.` 
+          });
+          
+          toast({
+            title: "Dataset Uploaded",
+            description: `Successfully uploaded ${result.data.length} fire rating records.`,
+          });
+          
+          // Auto-populate fields if possible
+          // This would be implemented based on specific requirements
         } else {
-          console.error("CSV missing required columns");
           setShowFireAlert(true);
+          setValidationMessage({ 
+            type: 'error', 
+            message: validation.message 
+          });
+          
+          toast({
+            title: "Validation Error",
+            description: validation.message,
+            variant: "destructive",
+          });
         }
       } catch (error) {
         console.error("Error parsing CSV:", error);
         setShowFireAlert(true);
+        const errorMessage = error instanceof Error ? error.message : 'Error parsing CSV file. Please check the format.';
+        
+        setValidationMessage({ 
+          type: 'error', 
+          message: errorMessage
+        });
+        
+        // Show debug button since there was an error
+        setShowDebugInfo(true);
+        
+        toast({
+          title: "Upload Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
       }
+    };
+    
+    reader.onerror = () => {
+      console.error("FileReader error:", reader.error);
+      setValidationMessage({ 
+        type: 'error', 
+        message: 'Failed to read the file. Please try again.' 
+      });
+      
+      toast({
+        title: "File Error",
+        description: 'Failed to read the file. Please try again.',
+        variant: "destructive",
+      });
     };
     
     reader.readAsText(file);
@@ -114,6 +198,31 @@ const FireRatingsStep = ({
             {requiredDatasets.fireRatings.prompt}
           </AlertDescription>
         </Alert>
+      )}
+      
+      {validationMessage.message && (
+        <Alert className={`mb-4 ${validationMessage.type === 'success' ? 'bg-green-50 border-green-200' : validationMessage.type === 'error' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+          <AlertDescription>
+            {validationMessage.message}
+          </AlertDescription>
+        </Alert>
+      )}
+      
+      {showDebugInfo && debugInfo && (
+        <div className="mb-4 overflow-auto bg-gray-50 p-3 rounded border">
+          <h3 className="text-sm font-medium mb-2">CSV Debug Info:</h3>
+          <div className="text-xs max-h-48 overflow-y-auto">
+            <p className="font-semibold">Summary: {debugInfo.summary}</p>
+            <p className="mt-1">First Row: "{debugInfo.firstRow}"</p>
+            <p className="mt-1">Character Codes:</p>
+            <pre className="bg-gray-100 p-1 mt-1">{JSON.stringify(debugInfo.charCodes)}</pre>
+            <p className="mt-1">First Few Rows:</p>
+            <pre className="bg-gray-100 p-1 mt-1">{JSON.stringify(debugInfo.firstFewRows, null, 2)}</pre>
+          </div>
+          <Button variant="ghost" size="sm" className="mt-1" onClick={() => setShowDebugInfo(false)}>
+            Hide Debug Info
+          </Button>
+        </div>
       )}
       
       <div className="space-y-6">
@@ -219,7 +328,7 @@ const FireRatingsStep = ({
         </div>
         
         <div className="pt-4">
-          <div className="file-upload-area">
+          <div className="file-upload-area border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-primary transition-colors">
             <label htmlFor="fireRatingsCsvUpload" className="cursor-pointer">
               <div className="text-center">
                 <p className="text-sm font-medium mb-1">Missing fire ratings data?</p>
@@ -241,3 +350,4 @@ const FireRatingsStep = ({
 }
 
 export default FireRatingsStep;
+
