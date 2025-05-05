@@ -276,6 +276,26 @@ export const parseNumericValue = (value: string): number | null => {
 };
 
 /**
+ * Normalize a string for more reliable comparisons
+ * Removes spaces, special characters, converts to lowercase
+ * @param text The string to normalize
+ * @returns Normalized string
+ */
+export const normalizeForComparison = (text: string): string => {
+  if (!text) return '';
+  return text.toLowerCase()
+    .replace(/[-\s()\[\]\/\\,.'"]/g, '') // Remove spaces, dashes, parentheses, brackets, slashes, commas, periods, quotes
+    .replace(/residential/i, 'r')
+    .replace(/commercial/i, 'c')
+    .replace(/industrial/i, 'i')
+    .replace(/agricultural/i, 'a')
+    .replace(/apartment/i, 'apt')
+    .replace(/mixed/i, 'mix')
+    .replace(/use/i, '')
+    .replace(/zone/i, '');
+};
+
+/**
  * Find a matching entry in zoning data based on jurisdiction and district
  * @param dataset Array of zoning data objects
  * @param jurisdiction User-selected jurisdiction
@@ -287,9 +307,13 @@ export const findZoningMatch = (
   jurisdiction: string, 
   zoningDistrict: string
 ): any | undefined => {
-  if (!dataset || dataset.length === 0) {
+  if (!dataset || dataset.length === 0 || !jurisdiction || !zoningDistrict) {
+    console.log("Missing data for zoning match:", { datasetLength: dataset?.length, jurisdiction, zoningDistrict });
     return undefined;
   }
+  
+  console.log("Finding zoning match for:", { jurisdiction, zoningDistrict });
+  console.log("Zoning dataset first few items:", dataset.slice(0, 3));
   
   // First try exact match
   let match = dataset.find((row: any) => {
@@ -299,45 +323,95 @@ export const findZoningMatch = (
       (row.jurisdiction && row.jurisdiction.toLowerCase() === jurisdiction.toLowerCase());
     
     // Check for zoning district match (exact)
-    const districtMatches = 
+    const exactDistrictMatches = 
       (row.zoning_district && row.zoning_district.toLowerCase() === zoningDistrict.toLowerCase()) ||
       (row.district && row.district.toLowerCase() === zoningDistrict.toLowerCase());
     
-    return countyMatches && districtMatches;
+    const result = countyMatches && exactDistrictMatches;
+    if (result) {
+      console.log("Found exact match:", row);
+    }
+    return result;
   });
   
   if (match) {
+    console.log("Exact match found:", match);
     return match;
   }
   
-  // If no exact match, try partial match (frontend ID might be just "r-5" while database has "Residential (R-5)")
+  console.log("No exact match found, trying advanced matching techniques");
+  
+  // Normalize the input zoning district for more reliable comparison
+  const normalizedInput = normalizeForComparison(zoningDistrict);
+  console.log("Normalized input:", normalizedInput);
+  
+  // Try more aggressive matching strategies
   match = dataset.find((row: any) => {
-    // Check for county/jurisdiction match
+    // Must match jurisdiction
     const countyMatches = 
       (row.county && row.county.toLowerCase() === jurisdiction.toLowerCase()) ||
       (row.jurisdiction && row.jurisdiction.toLowerCase() === jurisdiction.toLowerCase());
     
-    // Check for zoning district match (partial)
-    const zoning = row.zoning_district || row.district || "";
-    const normalizedDbZoning = zoning.toLowerCase().replace(/\s+/g, '');
-    const normalizedInputZoning = zoningDistrict.toLowerCase().replace(/\s+/g, '');
+    if (!countyMatches) return false;
+    
+    // Get district values from potential columns
+    const districtVal = row.zoning_district || row.district || '';
+    const normalizedDistrict = normalizeForComparison(districtVal);
     
     // Try different matching strategies
-    const containsMatch = normalizedDbZoning.includes(normalizedInputZoning) || 
-                         normalizedInputZoning.includes(normalizedDbZoning);
-                         
-    // Try to match just the code part, like "r-5" in "Residential (R-5)"
-    const codeMatch = zoning.match(/\(([^)]+)\)/);
+    
+    // Strategy 1: Normalize both and check if one contains the other
+    const containsMatch = normalizedDistrict.includes(normalizedInput) || 
+                           normalizedInput.includes(normalizedDistrict);
+    
+    // Strategy 2: Check for code in parentheses, e.g., "Residential (R-5)"
+    const codeMatch = districtVal.match(/\(([^)]+)\)/);
     const codeMatchResult = codeMatch ? 
-                          codeMatch[1].toLowerCase().replace(/\s+/g, '') === normalizedInputZoning : 
+                          normalizeForComparison(codeMatch[1]) === normalizedInput : 
                           false;
     
-    // Try to match with dashes removed (r5 vs r-5)
-    const noDashMatch = zoning.toLowerCase().replace(/[-\s]/g, '') === 
-                       zoningDistrict.toLowerCase().replace(/[-\s]/g, '');
+    // Strategy 3: Match just the alphanumeric part with the dash
+    // e.g., "r-5" in "R-5 Residential" or "Residential R-5"
+    const alphaNumericMatch = districtVal.match(/([a-z]-\d+)/i);
+    const inputAlphaNumeric = zoningDistrict.match(/([a-z]-\d+)/i);
     
-    return countyMatches && (containsMatch || codeMatchResult || noDashMatch);
+    const alphaNumericMatchResult = alphaNumericMatch && inputAlphaNumeric ? 
+                                  alphaNumericMatch[1].toLowerCase() === inputAlphaNumeric[1].toLowerCase() : 
+                                  false;
+    
+    // Strategy 4: Check for number-only match if both have numbers
+    // e.g., "5" in "R-5" should match with "RS-5"
+    const numberOnlyMatch = districtVal.match(/\d+/);
+    const inputNumberOnly = zoningDistrict.match(/\d+/);
+    
+    const numberOnlyMatchResult = numberOnlyMatch && inputNumberOnly ? 
+                                numberOnlyMatch[0] === inputNumberOnly[0] : 
+                                false;
+    
+    // Check if any strategy matched
+    const matched = containsMatch || codeMatchResult || alphaNumericMatchResult || numberOnlyMatchResult;
+    
+    if (matched) {
+      console.log("Match found using advanced strategy:", {
+        row: districtVal,
+        input: zoningDistrict,
+        normalizedRow: normalizedDistrict,
+        normalizedInput,
+        containsMatch,
+        codeMatchResult,
+        alphaNumericMatchResult,
+        numberOnlyMatchResult
+      });
+    }
+    
+    return matched;
   });
+  
+  if (match) {
+    console.log("Match found after trying all strategies:", match);
+  } else {
+    console.log("No match found after trying all strategies");
+  }
   
   return match;
 };
@@ -579,7 +653,7 @@ export const validateDatasetStructure = (
     ada: ["total_parking_spaces_provided", "minimum_required_ada_stalls"],
     heightLimits: ["occupancy", "type_of_construction", "ns", "s"],
     storyLimits: ["occupancy", "type_of_construction", "ns", "s"],
-    areaLimits: ["occupancy", "type_of_construction", "ns", "s", "sm"]
+    areaLimits: ["occupancy", "type_of_construction", "ns", "s"]
   };
   
   if (!requiredColumns[datasetType]) {

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +11,7 @@ import { zoningDistricts, requiredDatasets } from "@/data/codeData";
 import { parseCSV, checkRequiredColumns, findZoningMatch, validateDatasetStructure, calculateADAParking, debugCSVContent } from "@/utils/CSVHelper";
 import { useToast } from "@/hooks/use-toast";
 import { normalizeCSVColumns, logColumnTransformation, supabase } from "@/integrations/supabase/client";
-import { Loader2, Check, AlertCircle } from "lucide-react";
+import { Loader2, Check, AlertCircle, RefreshCw, Info } from "lucide-react";
 
 interface ZoningInfoStepProps {
   zoningData: {
@@ -38,9 +39,7 @@ const ZoningInfoStep = ({
   jurisdiction,
   onDatasetUploaded
 }: ZoningInfoStepProps) => {
-  const {
-    toast
-  } = useToast();
+  const { toast } = useToast();
   const [showZoningAlert, setShowZoningAlert] = useState(false);
   const [validationMessage, setValidationMessage] = useState<{
     type: 'success' | 'error' | 'warning';
@@ -60,6 +59,8 @@ const ZoningInfoStep = ({
   const [populatedFields, setPopulatedFields] = useState<string[]>([]);
   const [populationAttempted, setPopulationAttempted] = useState(false);
   const [lastPopulationSuccess, setLastPopulationSuccess] = useState(false);
+  const [attemptedMatch, setAttemptedMatch] = useState<string>("");
+  const [showMatchDetails, setShowMatchDetails] = useState(false);
   
   const filteredDistricts = zoningDistricts.filter(district => district.jurisdiction === jurisdiction);
 
@@ -91,6 +92,11 @@ const ZoningInfoStep = ({
             title: "Zoning Data Loaded",
             description: `${data.length} zoning standards loaded for ${jurisdiction}`
           });
+          
+          // If zoning district is already selected, try to populate fields
+          if (zoningData.zoningDistrict) {
+            setTimeout(() => populateZoningFields(), 500);
+          }
         } else {
           setValidationMessage({
             type: 'warning',
@@ -121,6 +127,7 @@ const ZoningInfoStep = ({
         }
         
         if (data && data.length > 0) {
+          console.log("Fetched ADA requirements from database:", data);
           setAdaDataset(data);
           onDatasetUploaded("ada", data);
           
@@ -149,17 +156,39 @@ const ZoningInfoStep = ({
     }
   }, [zoningData.zoningDistrict, jurisdiction, zoningDataset]);
   
+  // Check for auto-population opportunities when any field changes
+  useEffect(() => {
+    // Only check if we have zoning data and a district selected
+    if (zoningData.zoningDistrict && zoningDataset.length > 0 && !isLoading) {
+      const match = findZoningMatch(zoningDataset, jurisdiction, zoningData.zoningDistrict);
+      if (match && !lastPopulationSuccess) {
+        // Only show the auto-populate suggestion if we haven't successfully populated fields yet
+        setValidationMessage({
+          type: 'warning',
+          message: 'Data match found! Click "Apply Zoning Standards" to auto-populate fields.'
+        });
+      }
+    }
+  }, [zoningData, zoningDataset]);
+  
   // Function to populate zoning fields based on selected district
   const populateZoningFields = () => {
     setIsLoading(true);
     setPopulationAttempted(true);
+    setAttemptedMatch(zoningData.zoningDistrict);
     
     // Reset populated fields
     setPopulatedFields([]);
     
     const newPopulatedFields: string[] = [];
     
+    console.log("Attempting to find zoning match for:", zoningData.zoningDistrict);
+    console.log("Jurisdiction:", jurisdiction);
+    console.log("Available zoning data:", zoningDataset.length, "records");
+    
     const match = findZoningMatch(zoningDataset, jurisdiction, zoningData.zoningDistrict);
+    console.log("Match result:", match);
+    
     if (match) {
       // Auto-fill fields from the dataset
       if (match.front_setback && match.side_setback && match.rear_setback) {
@@ -196,6 +225,12 @@ const ZoningInfoStep = ({
       setLastPopulationSuccess(true);
 
       // Show success message
+      toast({
+        title: "Auto-Population Successful",
+        description: `${newPopulatedFields.length} fields updated from zoning standards.`,
+        variant: "default"
+      });
+      
       setValidationMessage({
         type: 'success',
         message: `Zoning data for ${match.zoning_district || match.district} auto-populated successfully! ${newPopulatedFields.length} fields updated.`
@@ -215,12 +250,17 @@ const ZoningInfoStep = ({
         message: `No matching zoning standards found for selected district "${zoningData.zoningDistrict}" in ${jurisdiction}. Please fill in the fields manually or upload zoning data.`
       });
       
-      setTimeout(() => {
-        setValidationMessage({
-          type: 'warning',
-          message: ''
-        });
-      }, 5000);
+      // Log available zoning districts for debugging
+      console.log("Available zoning districts in dataset:");
+      zoningDataset.forEach(item => {
+        console.log(`- ${item.county}: ${item.zoning_district}`);
+      });
+      
+      toast({
+        title: "No Match Found",
+        description: "Could not find matching zoning standards for the selected district.",
+        variant: "destructive"
+      });
     }
     
     setIsLoading(false);
@@ -290,7 +330,7 @@ const ZoningInfoStep = ({
 
           // Try to auto-populate if district already selected
           if (zoningData.zoningDistrict && jurisdiction) {
-            populateZoningFields();
+            setTimeout(() => populateZoningFields(), 500);
           }
         } else {
           setShowZoningAlert(true);
@@ -472,6 +512,27 @@ const ZoningInfoStep = ({
     return populatedFields.includes(fieldName);
   };
   
+  // Listen for field changes to check if auto-population should occur
+  const handleFieldChange = (field: string, value: string | boolean) => {
+    // Call the parent handler first
+    onZoningDataChange(field, value);
+    
+    // If we already had a successful auto-population, no need to suggest again
+    if (lastPopulationSuccess) return;
+    
+    // After manual field change, check if auto-population is available
+    if (field === "zoningDistrict" && zoningDataset.length > 0) {
+      // We'll show a message if there's a possible match
+      const match = findZoningMatch(zoningDataset, jurisdiction, value.toString());
+      if (match) {
+        setValidationMessage({
+          type: 'warning',
+          message: 'Data match found! Click "Apply Zoning Standards" to auto-populate fields.'
+        });
+      }
+    }
+  };
+  
   return <div className="step-container">
       <h2 className="step-title">
         <span className="step-icon">🏞️</span> Zoning & Site Info
@@ -520,6 +581,25 @@ const ZoningInfoStep = ({
           </Button>
         </div>}
       
+      {showMatchDetails && attemptedMatch && <div className="mb-4 overflow-auto bg-gray-50 p-3 rounded border">
+          <h3 className="text-sm font-medium mb-2">Matching Debug Info:</h3>
+          <div className="text-xs max-h-48 overflow-y-auto">
+            <p className="font-semibold">Attempted match for: {attemptedMatch}</p>
+            <p className="mt-1">Available zoning records in dataset: {zoningDataset.length}</p>
+            <p className="mt-1">Jurisdiction: {jurisdiction}</p>
+            <p className="mt-1">First 3 zoning records:</p>
+            <pre className="bg-gray-100 p-1 mt-1">
+              {JSON.stringify(zoningDataset.slice(0, 3).map(z => ({
+                jurisdiction: z.county,
+                district: z.zoning_district,
+              })), null, 2)}
+            </pre>
+          </div>
+          <Button variant="ghost" size="sm" className="mt-1" onClick={() => setShowMatchDetails(false)}>
+            Hide Match Debug Info
+          </Button>
+        </div>}
+      
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
@@ -527,7 +607,7 @@ const ZoningInfoStep = ({
             <div className="relative">
               <Select 
                 value={zoningData.zoningDistrict} 
-                onValueChange={value => onZoningDataChange("zoningDistrict", value)}
+                onValueChange={value => handleFieldChange("zoningDistrict", value)}
                 disabled={loadingZoningData}
               >
                 <SelectTrigger>
@@ -547,35 +627,56 @@ const ZoningInfoStep = ({
                 </div>
               )}
             </div>
-            {!loadingZoningData && zoningDataset.length > 0 && (
-              <Button 
-                type="button" 
-                variant="outline" 
-                size="sm" 
-                className={`mt-2 ${populationAttempted && lastPopulationSuccess ? 'bg-green-50 border-green-300 hover:bg-green-100' : populationAttempted ? 'bg-amber-50 border-amber-300 hover:bg-amber-100' : ''}`}
-                onClick={populateZoningFields}
-                disabled={!zoningData.zoningDistrict || isLoading}
+            <div className="flex items-center gap-2">
+              {!loadingZoningData && zoningDataset.length > 0 && (
+                <Button 
+                  type="button" 
+                  variant={populationAttempted && lastPopulationSuccess ? "outline" : "default"} 
+                  size="sm" 
+                  className={`mt-2 flex-1 ${populationAttempted && lastPopulationSuccess ? 'bg-green-50 border-green-300 hover:bg-green-100 text-green-700' : populationAttempted ? 'bg-amber-50 border-amber-300 hover:bg-amber-100 text-amber-700' : ''}`}
+                  onClick={populateZoningFields}
+                  disabled={!zoningData.zoningDistrict || isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Applying...
+                    </>
+                  ) : populationAttempted && lastPopulationSuccess ? (
+                    <>
+                      <Check className="mr-2 h-4 w-4" />
+                      Applied Successfully
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Apply Zoning Standards
+                    </>
+                  )}
+                </Button>
+              )}
+              
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() => setShowMatchDetails(!showMatchDetails)}
               >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Applying...
-                  </>
-                ) : populationAttempted && lastPopulationSuccess ? (
-                  <>
-                    <Check className="mr-2 h-4 w-4 text-green-500" />
-                    Applied Successfully
-                  </>
-                ) : (
-                  'Apply Zoning Standards'
-                )}
+                <Info className="h-4 w-4" />
               </Button>
-            )}
+            </div>
           </div>
           
           <div className="space-y-2">
             <Label htmlFor="lotArea">Lot Area (SF)</Label>
-            <Input id="lotArea" type="number" placeholder="Enter lot area in square feet" value={zoningData.lotArea} onChange={e => onZoningDataChange("lotArea", e.target.value)} />
+            <Input 
+              id="lotArea" 
+              type="number" 
+              placeholder="Enter lot area in square feet" 
+              value={zoningData.lotArea} 
+              onChange={e => handleFieldChange("lotArea", e.target.value)} 
+            />
           </div>
         </div>
         
@@ -590,7 +691,7 @@ const ZoningInfoStep = ({
                       id="setbacks" 
                       placeholder="Front, Side, Rear (e.g. 10,5,10)" 
                       value={zoningData.setbacks} 
-                      onChange={e => onZoningDataChange("setbacks", e.target.value)} 
+                      onChange={e => handleFieldChange("setbacks", e.target.value)} 
                       className={isFieldPopulated("setbacks") ? "border-green-400 bg-green-50 transition-all duration-300" : ""}
                     />
                     {isFieldPopulated("setbacks") && (
@@ -617,7 +718,7 @@ const ZoningInfoStep = ({
                       step="0.1" 
                       placeholder="Enter FAR" 
                       value={zoningData.far} 
-                      onChange={e => onZoningDataChange("far", e.target.value)}
+                      onChange={e => handleFieldChange("far", e.target.value)}
                       className={isFieldPopulated("far") ? "border-green-400 bg-green-50 transition-all duration-300" : ""} 
                     />
                     {isFieldPopulated("far") && (
@@ -641,7 +742,7 @@ const ZoningInfoStep = ({
               type="number" 
               placeholder="Enter maximum height" 
               value={zoningData.maxHeight} 
-              onChange={e => onZoningDataChange("maxHeight", e.target.value)} 
+              onChange={e => handleFieldChange("maxHeight", e.target.value)} 
               className={isFieldPopulated("maxHeight") ? "border-green-400 bg-green-50 transition-all duration-300" : ""}
             />
             {isFieldPopulated("maxHeight") && (
@@ -658,7 +759,7 @@ const ZoningInfoStep = ({
               max="100" 
               placeholder="Enter lot coverage percentage" 
               value={zoningData.lotCoverage} 
-              onChange={e => onZoningDataChange("lotCoverage", e.target.value)} 
+              onChange={e => handleFieldChange("lotCoverage", e.target.value)} 
               className={isFieldPopulated("lotCoverage") ? "border-green-400 bg-green-50 transition-all duration-300" : ""}
             />
             {isFieldPopulated("lotCoverage") && (
@@ -676,7 +777,7 @@ const ZoningInfoStep = ({
               min="0" 
               placeholder="Enter required parking spaces" 
               value={zoningData.parkingRequired} 
-              onChange={e => onZoningDataChange("parkingRequired", e.target.value)} 
+              onChange={e => handleFieldChange("parkingRequired", e.target.value)} 
               className={isFieldPopulated("parkingRequired") ? "border-green-400 bg-green-50 transition-all duration-300" : ""}
             />
             {isFieldPopulated("parkingRequired") && (
@@ -709,22 +810,22 @@ const ZoningInfoStep = ({
         
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
           <div className="flex items-center space-x-2">
-            <Checkbox id="isSMA" checked={zoningData.isSMA} onCheckedChange={checked => onZoningDataChange("isSMA", Boolean(checked))} />
+            <Checkbox id="isSMA" checked={zoningData.isSMA} onCheckedChange={checked => handleFieldChange("isSMA", Boolean(checked))} />
             <Label htmlFor="isSMA">SMA</Label>
           </div>
           
           <div className="flex items-center space-x-2">
-            <Checkbox id="isFloodZone" checked={zoningData.isFloodZone} onCheckedChange={checked => onZoningDataChange("isFloodZone", Boolean(checked))} />
+            <Checkbox id="isFloodZone" checked={zoningData.isFloodZone} onCheckedChange={checked => handleFieldChange("isFloodZone", Boolean(checked))} />
             <Label htmlFor="isFloodZone">Flood Zone</Label>
           </div>
           
           <div className="flex items-center space-x-2">
-            <Checkbox id="isLavaZone" checked={zoningData.isLavaZone} onCheckedChange={checked => onZoningDataChange("isLavaZone", Boolean(checked))} />
+            <Checkbox id="isLavaZone" checked={zoningData.isLavaZone} onCheckedChange={checked => handleFieldChange("isLavaZone", Boolean(checked))} />
             <Label htmlFor="isLavaZone">Lava Zone</Label>
           </div>
           
           <div className="flex items-center space-x-2">
-            <Checkbox id="isHistoricDistrict" checked={zoningData.isHistoricDistrict} onCheckedChange={checked => onZoningDataChange("isHistoricDistrict", Boolean(checked))} />
+            <Checkbox id="isHistoricDistrict" checked={zoningData.isHistoricDistrict} onCheckedChange={checked => handleFieldChange("isHistoricDistrict", Boolean(checked))} />
             <Label htmlFor="isHistoricDistrict">Historic District</Label>
           </div>
         </div>
