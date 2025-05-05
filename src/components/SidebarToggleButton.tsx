@@ -12,7 +12,7 @@ const SidebarToggleButton = () => {
     <Button
       variant="ghost"
       size="icon"
-      className="fixed left-4 top-4 z-20 md:left-6 md:top-6 bg-background/80 backdrop-blur-sm shadow-sm border"
+      className="absolute left-4 top-4 z-20 md:left-6 md:top-6 bg-background/80 backdrop-blur-sm shadow-sm border"
       onClick={toggleSidebar}
       aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
     >
