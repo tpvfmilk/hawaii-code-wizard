@@ -14,21 +14,21 @@ export type Database = {
           created_at: string | null
           id: string
           minimum_required_ada_stalls: number
-          total_parking_spaces_provided: number
+          total_parking_spaces_provided: string
           updated_at: string | null
         }
         Insert: {
           created_at?: string | null
           id?: string
           minimum_required_ada_stalls: number
-          total_parking_spaces_provided: number
+          total_parking_spaces_provided: string
           updated_at?: string | null
         }
         Update: {
           created_at?: string | null
           id?: string
           minimum_required_ada_stalls?: number
-          total_parking_spaces_provided?: number
+          total_parking_spaces_provided?: string
           updated_at?: string | null
         }
         Relationships: []

@@ -43,7 +43,9 @@ export function normalizeCSVColumns(data: any[], tableType: 'zoning' | 'parking'
     },
     ada: {
       'Total Parking Spaces': 'total_parking_spaces_provided',
-      'Minimum Required ADA Stalls': 'minimum_required_ada_stalls'
+      'Total Parking Spaces Provided': 'total_parking_spaces_provided',
+      'Minimum Required ADA Stalls': 'minimum_required_ada_stalls',
+      'Required ADA Stalls': 'minimum_required_ada_stalls'
     }
   };
   
@@ -74,6 +76,29 @@ export function normalizeCSVColumns(data: any[], tableType: 'zoning' | 'parking'
       }
     });
     
+    // For ADA datasets, ensure the minimum_required_ada_stalls is converted to a number
+    if (tableType === 'ada') {
+      // If the value is already numeric, we're good
+      if (newRow.minimum_required_ada_stalls && !isNaN(Number(newRow.minimum_required_ada_stalls))) {
+        newRow.minimum_required_ada_stalls = Number(newRow.minimum_required_ada_stalls);
+      } 
+      // If it's not numeric, try to extract a number
+      else if (newRow.minimum_required_ada_stalls && typeof newRow.minimum_required_ada_stalls === 'string') {
+        const match = newRow.minimum_required_ada_stalls.match(/(\d+)/);
+        if (match) {
+          newRow.minimum_required_ada_stalls = Number(match[1]);
+        } else {
+          console.warn(`Could not parse numeric value from ADA stalls: ${newRow.minimum_required_ada_stalls}`);
+          newRow.minimum_required_ada_stalls = 0; // Default to 0 if we can't parse it
+        }
+      }
+      
+      // Ensure total_parking_spaces_provided is a string
+      if (newRow.total_parking_spaces_provided !== undefined) {
+        newRow.total_parking_spaces_provided = String(newRow.total_parking_spaces_provided);
+      }
+    }
+    
     return newRow;
   });
 }
@@ -90,3 +115,4 @@ export function logColumnTransformation(originalData: any[], normalizedData: any
   console.log('First row before:', originalData[0]);
   console.log('First row after:', normalizedData[0]);
 }
+

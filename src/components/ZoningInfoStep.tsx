@@ -273,6 +273,7 @@ const ZoningInfoStep = ({
         // Create debug information
         const debug = debugCSVContent(fileContent);
         console.log("ADA CSV Upload: Debug info", debug);
+        setDebugInfo(debug); // Store debug info in case of errors
         
         const result = parseCSV(fileContent);
         const { data } = result;
@@ -281,11 +282,15 @@ const ZoningInfoStep = ({
           throw new Error("No data found in CSV file");
         }
         
+        console.log("ADA CSV Upload: Original data first row", data[0]);
+        
         // Normalize CSV column names to match database schema
         const normalizedData = normalizeCSVColumns(data, "ada");
         
         // Log transformation for debugging
         logColumnTransformation(data, normalizedData);
+        
+        console.log("ADA CSV Upload: Normalized data first row", normalizedData[0]);
         
         // Validate dataset structure with normalized data
         const validation = validateDatasetStructure(normalizedData, "ada");
@@ -297,6 +302,9 @@ const ZoningInfoStep = ({
             type: 'success', 
             message: `Successfully uploaded ${data.length} ADA parking requirement records.` 
           });
+          
+          setShowPreview(true);
+          setPreviewData(data.slice(0, 3)); // Show a preview of the data
           
           toast({
             title: "Dataset Uploaded",
@@ -315,6 +323,9 @@ const ZoningInfoStep = ({
             message: validation.message 
           });
           
+          // Show debug info since there was an error
+          setShowDebugInfo(true);
+          
           toast({
             title: "Validation Error",
             description: validation.message,
@@ -331,6 +342,9 @@ const ZoningInfoStep = ({
           type: 'error', 
           message: errorMessage
         });
+        
+        // Show debug info since there was an error
+        setShowDebugInfo(true);
         
         toast({
           title: "Upload Error",
