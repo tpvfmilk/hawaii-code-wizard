@@ -2,8 +2,9 @@
 import React from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Loader2, Check, RefreshCw, Info } from "lucide-react";
+import { Loader2, Check, RefreshCw, Bug } from "lucide-react";
 import { ZoningDistrict } from "@/data/codeData";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ZoningDistrictSelectorProps {
   zoningDistrict: string;
@@ -84,15 +85,24 @@ const ZoningDistrictSelector = ({
           </Button>
         )}
         
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-2"
-          onClick={() => setShowMatchDetails(!showMatchDetails)}
-        >
-          <Info className="h-4 w-4" />
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant={showMatchDetails ? "secondary" : "outline"}
+                size="sm"
+                className="mt-2"
+                onClick={() => setShowMatchDetails(!showMatchDetails)}
+              >
+                <Bug className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Show debug information to troubleshoot matching issues</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
     </div>
   );

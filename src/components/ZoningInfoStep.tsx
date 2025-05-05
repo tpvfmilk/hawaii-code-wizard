@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
 import { zoningDistricts, requiredDatasets } from "@/data/codeData";
-import { parseCSV, checkRequiredColumns, findZoningMatch, validateDatasetStructure, calculateADAParking, debugCSVContent } from "@/utils/CSVHelper";
+import { parseCSV, checkRequiredColumns, validateDatasetStructure, calculateADAParking, debugCSVContent } from "@/utils/CSVHelper";
 import { useToast } from "@/hooks/use-toast";
 import { normalizeCSVColumns, logColumnTransformation, supabase } from "@/integrations/supabase/client";
+import { findZoningMatch, findZoningMatchWithDebug } from "@/utils/matchingUtils";
 
 // Import our new components
 import ZoningDistrictSelector from "./zoning/ZoningDistrictSelector";
@@ -65,6 +65,7 @@ const ZoningInfoStep = ({
   const [lastPopulationSuccess, setLastPopulationSuccess] = useState(false);
   const [attemptedMatch, setAttemptedMatch] = useState<string>("");
   const [showMatchDetails, setShowMatchDetails] = useState(false);
+  const [matchDebugInfo, setMatchDebugInfo] = useState<any>(null);
   
   const filteredDistricts = zoningDistricts.filter(district => district.jurisdiction === jurisdiction);
 
@@ -190,7 +191,13 @@ const ZoningInfoStep = ({
     console.log("Jurisdiction:", jurisdiction);
     console.log("Available zoning data:", zoningDataset.length, "records");
     
-    const match = findZoningMatch(zoningDataset, jurisdiction, zoningData.zoningDistrict);
+    // Use our enhanced debug matcher
+    const { match, debugInfo } = findZoningMatchWithDebug(zoningDataset, jurisdiction, zoningData.zoningDistrict);
+    
+    // Store debug info for display
+    setMatchDebugInfo(debugInfo);
+    
+    console.log("Match debug info:", debugInfo);
     console.log("Match result:", match);
     
     if (match) {
@@ -254,11 +261,14 @@ const ZoningInfoStep = ({
         message: `No matching zoning standards found for selected district "${zoningData.zoningDistrict}" in ${jurisdiction}. Please fill in the fields manually or upload zoning data.`
       });
       
-      // Log available zoning districts for debugging
-      console.log("Available zoning districts in dataset:");
-      zoningDataset.forEach(item => {
-        console.log(`- ${item.county}: ${item.zoning_district}`);
-      });
+      // Log detailed information about why the match failed
+      console.log("Match failed. Debug information:");
+      console.log("- District ID attempted:", zoningData.zoningDistrict);
+      console.log("- Jurisdiction attempted:", jurisdiction);
+      console.log("- Jurisdiction values in dataset:", debugInfo.jurisdictionCheck.datasetValues);
+      console.log("- District values in dataset:", debugInfo.districtCheck.allValues);
+      console.log("- Exact matches found:", debugInfo.districtCheck.exactMatches);
+      console.log("- Partial matches found:", debugInfo.districtCheck.partialMatches);
       
       toast({
         title: "No Match Found",
@@ -567,7 +577,8 @@ const ZoningInfoStep = ({
         attemptedMatch={attemptedMatch} 
         zoningDataset={zoningDataset}
         jurisdiction={jurisdiction}
-        setShowMatchDetails={setShowMatchDetails} 
+        setShowMatchDetails={setShowMatchDetails}
+        debugInfo={matchDebugInfo}
       />
       
       <div className="space-y-6">
