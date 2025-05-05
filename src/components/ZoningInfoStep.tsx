@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +10,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { zoningDistricts, requiredDatasets } from "@/data/codeData";
 import { parseCSV, checkRequiredColumns, findZoningMatch, validateDatasetStructure, calculateADAParking, debugCSVContent } from "@/utils/CSVHelper";
 import { useToast } from "@/hooks/use-toast";
-import { normalizeCSVColumns, logColumnTransformation } from "@/integrations/supabase/client";
+import { normalizeCSVColumns, logColumnTransformation, supabase } from "@/integrations/supabase/client";
+import { Loader2 } from "lucide-react";
+
 interface ZoningInfoStepProps {
   zoningData: {
     zoningDistrict: string;
@@ -29,6 +32,7 @@ interface ZoningInfoStepProps {
   jurisdiction: string;
   onDatasetUploaded: (datasetType: string, data: any[]) => void;
 }
+
 const ZoningInfoStep = ({
   zoningData,
   onZoningDataChange,
@@ -52,43 +56,158 @@ const ZoningInfoStep = ({
   const [zoningDataset, setZoningDataset] = useState<any[]>([]);
   const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingZoningData, setLoadingZoningData] = useState(true);
+  const [populatedFields, setPopulatedFields] = useState<string[]>([]);
+  
   const filteredDistricts = zoningDistricts.filter(district => district.jurisdiction === jurisdiction);
+
+  // Fetch zoning data from Supabase when component mounts
+  useEffect(() => {
+    const fetchZoningData = async () => {
+      try {
+        setLoadingZoningData(true);
+        const { data, error } = await supabase
+          .from('zoning_standards')
+          .select('*')
+          .eq('county', jurisdiction);
+        
+        if (error) {
+          console.error("Error fetching zoning data:", error);
+          return;
+        }
+        
+        if (data && data.length > 0) {
+          console.log("Fetched zoning standards from database:", data);
+          setZoningDataset(data);
+          onDatasetUploaded("zoning", data);
+          
+          toast({
+            title: "Zoning Data Loaded",
+            description: `${data.length} zoning standards loaded for ${jurisdiction}`
+          });
+        }
+      } catch (err) {
+        console.error("Failed to fetch zoning data:", err);
+      } finally {
+        setLoadingZoningData(false);
+      }
+    };
+    
+    // Fetch ADA requirements
+    const fetchADAData = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('ada_requirements')
+          .select('*');
+        
+        if (error) {
+          console.error("Error fetching ADA data:", error);
+          return;
+        }
+        
+        if (data && data.length > 0) {
+          setAdaDataset(data);
+          onDatasetUploaded("ada", data);
+          
+          // If parking is already specified, calculate ADA requirement
+          if (zoningData.parkingRequired) {
+            const totalParking = parseInt(zoningData.parkingRequired);
+            const adaResult = calculateADAParking(data, totalParking);
+            onZoningDataChange("adaParking", adaResult.required.toString());
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch ADA data:", err);
+      }
+    };
+    
+    if (jurisdiction) {
+      fetchZoningData();
+      fetchADAData();
+    }
+  }, [jurisdiction]);
 
   // Auto-populate fields when zoning district changes
   useEffect(() => {
     if (zoningData.zoningDistrict && jurisdiction && zoningDataset.length > 0) {
-      const match = findZoningMatch(zoningDataset, jurisdiction, zoningData.zoningDistrict);
-      if (match) {
-        // Auto-fill fields from the dataset
-        if (match.front_setback && match.side_setback && match.rear_setback) {
-          onZoningDataChange('setbacks', `${match.front_setback},${match.side_setback},${match.rear_setback}`);
-        }
-        if (match.max_far) {
-          onZoningDataChange('far', match.max_far.toString());
-        }
-        if (match.max_height) {
-          onZoningDataChange('maxHeight', match.max_height.toString());
-        }
-        if (match.max_lot_coverage) {
-          onZoningDataChange('lotCoverage', match.max_lot_coverage.toString());
-        }
-
-        // Show success message
-        setValidationMessage({
-          type: 'success',
-          message: 'Zoning data auto-populated successfully!'
-        });
-
-        // Hide message after 3 seconds
-        setTimeout(() => {
-          setValidationMessage({
-            type: 'warning',
-            message: ''
-          });
-        }, 3000);
-      }
+      populateZoningFields();
     }
   }, [zoningData.zoningDistrict, jurisdiction, zoningDataset]);
+  
+  // Function to populate zoning fields based on selected district
+  const populateZoningFields = () => {
+    setIsLoading(true);
+    // Reset populated fields
+    setPopulatedFields([]);
+    
+    const newPopulatedFields: string[] = [];
+    
+    const match = findZoningMatch(zoningDataset, jurisdiction, zoningData.zoningDistrict);
+    if (match) {
+      // Auto-fill fields from the dataset
+      if (match.front_setback && match.side_setback && match.rear_setback) {
+        onZoningDataChange('setbacks', `${match.front_setback},${match.side_setback},${match.rear_setback}`);
+        newPopulatedFields.push('setbacks');
+      }
+      if (match.max_far) {
+        onZoningDataChange('far', match.max_far.toString());
+        newPopulatedFields.push('far');
+      }
+      if (match.max_height) {
+        onZoningDataChange('maxHeight', match.max_height.toString());
+        newPopulatedFields.push('maxHeight');
+      }
+      if (match.max_lot_coverage) {
+        onZoningDataChange('lotCoverage', match.max_lot_coverage.toString());
+        newPopulatedFields.push('lotCoverage');
+      }
+      if (match.parking_required) {
+        onZoningDataChange('parkingRequired', match.parking_required.toString());
+        newPopulatedFields.push('parkingRequired');
+        
+        // Also update ADA parking if adaDataset is available
+        if (adaDataset.length > 0) {
+          const totalParking = parseInt(match.parking_required);
+          const adaResult = calculateADAParking(adaDataset, totalParking);
+          onZoningDataChange("adaParking", adaResult.required.toString());
+          newPopulatedFields.push('adaParking');
+        }
+      }
+
+      // Set the populated fields for highlighting
+      setPopulatedFields(newPopulatedFields);
+
+      // Show success message
+      setValidationMessage({
+        type: 'success',
+        message: 'Zoning data auto-populated successfully!'
+      });
+
+      // Hide message after 3 seconds
+      setTimeout(() => {
+        setValidationMessage({
+          type: 'warning',
+          message: ''
+        });
+      }, 3000);
+    } else {
+      setValidationMessage({
+        type: 'warning',
+        message: 'No matching zoning standards found for selected district.'
+      });
+      
+      setTimeout(() => {
+        setValidationMessage({
+          type: 'warning',
+          message: ''
+        });
+      }, 3000);
+    }
+    
+    setIsLoading(false);
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -153,22 +272,7 @@ const ZoningInfoStep = ({
 
           // Try to auto-populate if district already selected
           if (zoningData.zoningDistrict && jurisdiction) {
-            const match = findZoningMatch(normalizedData, jurisdiction, zoningData.zoningDistrict);
-            if (match) {
-              // Auto-fill fields from the dataset
-              if (match.front_setback && match.side_setback && match.rear_setback) {
-                onZoningDataChange('setbacks', `${match.front_setback},${match.side_setback},${match.rear_setback}`);
-              }
-              if (match.max_far) {
-                onZoningDataChange('far', match.max_far.toString());
-              }
-              if (match.max_height) {
-                onZoningDataChange('maxHeight', match.max_height.toString());
-              }
-              if (match.max_lot_coverage) {
-                onZoningDataChange('lotCoverage', match.max_lot_coverage.toString());
-              }
-            }
+            populateZoningFields();
           }
         } else {
           setShowZoningAlert(true);
@@ -215,6 +319,7 @@ const ZoningInfoStep = ({
     };
     reader.readAsText(file);
   };
+
   const handleADAFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -326,6 +431,7 @@ const ZoningInfoStep = ({
     };
     reader.readAsText(file);
   };
+
   const calculateTotalParking = () => {
     const parking = parseFloat(zoningData.parkingRequired) || 0;
     return Math.ceil(parking);
@@ -342,6 +448,12 @@ const ZoningInfoStep = ({
       onZoningDataChange("adaParking", adaRequired.required.toString());
     }
   }, [zoningData.parkingRequired, adaDataset]);
+  
+  // Helper function to determine if a field was recently populated
+  const isFieldPopulated = (fieldName: string) => {
+    return populatedFields.includes(fieldName);
+  };
+  
   return <div className="step-container">
       <h2 className="step-title">
         <span className="step-icon">🏞️</span> Zoning & Site Info
@@ -392,16 +504,48 @@ const ZoningInfoStep = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="zoningDistrict">Zoning</Label>
-            <Select value={zoningData.zoningDistrict} onValueChange={value => onZoningDataChange("zoningDistrict", value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select zoning district" />
-              </SelectTrigger>
-              <SelectContent>
-                {filteredDistricts.map(district => <SelectItem key={district.id} value={district.id}>
-                    {district.name}
-                  </SelectItem>)}
-              </SelectContent>
-            </Select>
+            <div className="relative">
+              <Select 
+                value={zoningData.zoningDistrict} 
+                onValueChange={value => onZoningDataChange("zoningDistrict", value)}
+                disabled={loadingZoningData}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={loadingZoningData ? "Loading zoning data..." : "Select zoning district"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredDistricts.map(district => (
+                    <SelectItem key={district.id} value={district.id}>
+                      {district.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {loadingZoningData && (
+                <div className="absolute right-10 top-2">
+                  <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                </div>
+              )}
+            </div>
+            {!loadingZoningData && zoningDataset.length > 0 && (
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm" 
+                className="mt-2" 
+                onClick={populateZoningFields}
+                disabled={!zoningData.zoningDistrict || isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Applying...
+                  </>
+                ) : (
+                  'Apply Zoning Standards'
+                )}
+              </Button>
+            )}
           </div>
           
           <div className="space-y-2">
@@ -417,7 +561,13 @@ const ZoningInfoStep = ({
                 <TooltipTrigger asChild>
                   <div>
                     <Label htmlFor="setbacks">Setbacks (ft)</Label>
-                    <Input id="setbacks" placeholder="Front, Side, Rear (e.g. 10,5,10)" value={zoningData.setbacks} onChange={e => onZoningDataChange("setbacks", e.target.value)} />
+                    <Input 
+                      id="setbacks" 
+                      placeholder="Front, Side, Rear (e.g. 10,5,10)" 
+                      value={zoningData.setbacks} 
+                      onChange={e => onZoningDataChange("setbacks", e.target.value)} 
+                      className={isFieldPopulated("setbacks") ? "border-green-400 bg-green-50" : ""}
+                    />
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -433,7 +583,15 @@ const ZoningInfoStep = ({
                 <TooltipTrigger asChild>
                   <div>
                     <Label htmlFor="far">Floor Area Ratio (FAR)</Label>
-                    <Input id="far" type="number" step="0.1" placeholder="Enter FAR" value={zoningData.far} onChange={e => onZoningDataChange("far", e.target.value)} />
+                    <Input 
+                      id="far" 
+                      type="number" 
+                      step="0.1" 
+                      placeholder="Enter FAR" 
+                      value={zoningData.far} 
+                      onChange={e => onZoningDataChange("far", e.target.value)}
+                      className={isFieldPopulated("far") ? "border-green-400 bg-green-50" : ""} 
+                    />
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -447,26 +605,57 @@ const ZoningInfoStep = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="maxHeight">Max Height (ft)</Label>
-            <Input id="maxHeight" type="number" placeholder="Enter maximum height" value={zoningData.maxHeight} onChange={e => onZoningDataChange("maxHeight", e.target.value)} />
+            <Input 
+              id="maxHeight" 
+              type="number" 
+              placeholder="Enter maximum height" 
+              value={zoningData.maxHeight} 
+              onChange={e => onZoningDataChange("maxHeight", e.target.value)} 
+              className={isFieldPopulated("maxHeight") ? "border-green-400 bg-green-50" : ""}
+            />
           </div>
           
           <div className="space-y-2">
             <Label htmlFor="lotCoverage">Lot Coverage (%)</Label>
-            <Input id="lotCoverage" type="number" min="0" max="100" placeholder="Enter lot coverage percentage" value={zoningData.lotCoverage} onChange={e => onZoningDataChange("lotCoverage", e.target.value)} />
+            <Input 
+              id="lotCoverage" 
+              type="number" 
+              min="0" 
+              max="100" 
+              placeholder="Enter lot coverage percentage" 
+              value={zoningData.lotCoverage} 
+              onChange={e => onZoningDataChange("lotCoverage", e.target.value)} 
+              className={isFieldPopulated("lotCoverage") ? "border-green-400 bg-green-50" : ""}
+            />
           </div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="parkingRequired">Parking Required (spaces)</Label>
-            <Input id="parkingRequired" type="number" min="0" placeholder="Enter required parking spaces" value={zoningData.parkingRequired} onChange={e => onZoningDataChange("parkingRequired", e.target.value)} />
+            <Input 
+              id="parkingRequired" 
+              type="number" 
+              min="0" 
+              placeholder="Enter required parking spaces" 
+              value={zoningData.parkingRequired} 
+              onChange={e => onZoningDataChange("parkingRequired", e.target.value)} 
+              className={isFieldPopulated("parkingRequired") ? "border-green-400 bg-green-50" : ""}
+            />
           </div>
           
           <div className="space-y-2">
             <Label htmlFor="adaParking">ADA Parking Required</Label>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Input id="adaParking" type="number" min="0" readOnly value={zoningData.adaParking} className="bg-gray-50" />
+                <Input 
+                  id="adaParking" 
+                  type="number" 
+                  min="0" 
+                  readOnly 
+                  value={zoningData.adaParking} 
+                  className={`bg-gray-50 ${isFieldPopulated("adaParking") ? "border-green-400" : ""}`} 
+                />
               </TooltipTrigger>
               <TooltipContent>
                 <p>Automatically calculated based on total parking spaces</p>
