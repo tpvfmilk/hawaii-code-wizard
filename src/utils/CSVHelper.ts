@@ -1,4 +1,3 @@
-
 export interface ParsedCSVData {
   data: any[];
   originalHeaders: string[];
@@ -11,80 +10,117 @@ export interface ParsedCSVData {
  * @returns Object containing parsed data and header information
  */
 export const parseCSV = (text: string): ParsedCSVData => {
-  // Split text into rows
-  const rows = text.split(/\r?\n/).filter(row => row.trim() !== '');
-  
-  if (rows.length === 0) {
-    return { data: [], originalHeaders: [], normalizedHeaders: [] };
-  }
-  
-  // Parse header row and preserve original headers
-  const originalHeaders = rows[0].split(',').map(header => header.trim().replace(/^"|"$/g, ''));
-  
-  // Create normalized headers for consistent access
-  const normalizedHeaders = originalHeaders.map(header => 
-    header.toLowerCase().replace(/[^a-z0-9]/g, '_')
-  );
-  
-  // Parse data rows
-  const data = [];
-  for (let i = 1; i < rows.length; i++) {
-    // Handle quoted values with commas inside them
-    const values: string[] = [];
-    let inQuote = false;
-    let currentValue = '';
+  try {
+    // Validate input
+    if (!text || typeof text !== 'string') {
+      console.error("CSV Parser: Invalid input - empty or non-string input");
+      throw new Error("Invalid CSV: empty or non-string input");
+    }
     
-    for (let j = 0; j < rows[i].length; j++) {
-      const char = rows[i][j];
+    // Split text into rows
+    const rows = text.split(/\r?\n/).filter(row => row.trim() !== '');
+    
+    if (rows.length === 0) {
+      console.error("CSV Parser: No rows found in CSV");
+      throw new Error("Invalid CSV: no rows found");
+    }
+    
+    // Parse header row and preserve original headers
+    const originalHeaders = parseCSVRow(rows[0]);
+    
+    if (originalHeaders.length === 0) {
+      console.error("CSV Parser: No headers found in CSV");
+      throw new Error("Invalid CSV: no headers found");
+    }
+    
+    // Create normalized headers for consistent access
+    const normalizedHeaders = originalHeaders.map(header => 
+      header.toLowerCase().replace(/[^a-z0-9]/g, '_')
+    );
+    
+    // Parse data rows
+    const data = [];
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i].trim() === '') continue;
       
-      if (char === '"') {
-        inQuote = !inQuote;
-      } else if (char === ',' && !inQuote) {
-        values.push(cleanValue(currentValue));
-        currentValue = '';
-      } else {
-        currentValue += char;
+      try {
+        const values = parseCSVRow(rows[i]);
+        
+        // Create object with both original and normalized headers
+        const rowObj: any = {};
+        normalizedHeaders.forEach((header, index) => {
+          if (index < values.length) {
+            rowObj[header] = parseValue(values[index]);
+          } else {
+            rowObj[header] = '';
+          }
+        });
+        
+        // Also add a version with original headers
+        originalHeaders.forEach((header, index) => {
+          if (index < values.length) {
+            // Only add if different from normalized
+            if (header.toLowerCase().replace(/[^a-z0-9]/g, '_') !== header) {
+              rowObj[header] = parseValue(values[index]);
+            }
+          }
+        });
+        
+        data.push(rowObj);
+      } catch (err) {
+        console.error(`CSV Parser: Error parsing row ${i + 1}:`, err);
+        // Continue parsing other rows instead of failing completely
       }
     }
     
-    // Add the last value
-    values.push(cleanValue(currentValue));
+    if (data.length === 0) {
+      console.warn("CSV Parser: No data rows found in CSV");
+    }
     
-    // Create object with both original and normalized headers
-    const rowObj: any = {};
-    normalizedHeaders.forEach((header, index) => {
-      if (index < values.length) {
-        rowObj[header] = values[index];
-        // Also try to convert to appropriate types
-        const parsedValue = parseValue(values[index]);
-        if (parsedValue !== values[index]) {
-          rowObj[header] = parsedValue;
-        }
+    return { data, originalHeaders, normalizedHeaders };
+  } catch (err) {
+    console.error("CSV Parser: Fatal error parsing CSV:", err);
+    throw new Error(`Failed to process CSV file: ${err.message}`);
+  }
+};
+
+/**
+ * Parse a single CSV row, handling quoted values properly
+ * @param row The CSV row string to parse
+ * @returns Array of string values
+ */
+function parseCSVRow(row: string): string[] {
+  if (!row) return [];
+  
+  const values: string[] = [];
+  let inQuote = false;
+  let currentValue = '';
+  
+  for (let j = 0; j < row.length; j++) {
+    const char = row[j];
+    
+    if (char === '"') {
+      if (inQuote && j < row.length - 1 && row[j + 1] === '"') {
+        // Handle escaped quotes (two double quotes in a row)
+        currentValue += '"';
+        j++; // Skip the next quote
       } else {
-        rowObj[header] = '';
+        // Toggle quote state
+        inQuote = !inQuote;
       }
-    });
-    
-    // Also add a version with original headers
-    originalHeaders.forEach((header, index) => {
-      if (index < values.length) {
-        // Only add if different from normalized
-        if (header.toLowerCase().replace(/[^a-z0-9]/g, '_') !== header) {
-          rowObj[header] = values[index];
-          // Also try to convert to appropriate types
-          const parsedValue = parseValue(values[index]);
-          if (parsedValue !== values[index]) {
-            rowObj[header] = parsedValue;
-          }
-        }
-      }
-    });
-    
-    data.push(rowObj);
+    } else if (char === ',' && !inQuote) {
+      values.push(cleanValue(currentValue));
+      currentValue = '';
+    } else {
+      currentValue += char;
+    }
   }
   
-  return { data, originalHeaders, normalizedHeaders };
-};
+  // Add the last value
+  values.push(cleanValue(currentValue));
+  
+  return values;
+}
 
 /**
  * Check if the data includes all required columns

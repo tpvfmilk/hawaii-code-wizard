@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +20,7 @@ import {
   validateDatasetStructure,
   calculateADAParking
 } from "@/utils/CSVHelper";
+import { useToast } from "@/hooks/use-toast";
 
 interface ZoningInfoStepProps {
   zoningData: {
@@ -48,6 +48,7 @@ const ZoningInfoStep = ({
   jurisdiction,
   onDatasetUploaded
 }: ZoningInfoStepProps) => {
+  const { toast } = useToast();
   const [showZoningAlert, setShowZoningAlert] = useState(false);
   const [validationMessage, setValidationMessage] = useState<{type: 'success' | 'error' | 'warning'; message: string}>({ 
     type: 'warning', 
@@ -106,8 +107,17 @@ const ZoningInfoStep = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const result = parseCSV(event.target?.result as string);
+        if (!event.target?.result) {
+          throw new Error("Failed to read file");
+        }
+        
+        const result = parseCSV(event.target.result as string);
         const { data } = result;
+        
+        if (!data || data.length === 0) {
+          throw new Error("No data found in CSV file");
+        }
+        
         setPreviewData(data.slice(0, 3)); // Store first 3 rows for preview
         
         // Validate dataset structure
@@ -120,6 +130,11 @@ const ZoningInfoStep = ({
           setValidationMessage({ 
             type: 'success', 
             message: `Successfully uploaded ${data.length} zoning records.` 
+          });
+          
+          toast({
+            title: "Dataset Uploaded",
+            description: `Successfully uploaded ${data.length} zoning records.`,
           });
           
           // Show preview
@@ -153,6 +168,13 @@ const ZoningInfoStep = ({
             type: 'error', 
             message: validation.message 
           });
+          
+          toast({
+            title: "Validation Error",
+            description: validation.message,
+            variant: "destructive",
+          });
+          
           console.error("CSV validation failed:", validation.message);
         }
       } catch (error) {
@@ -160,9 +182,29 @@ const ZoningInfoStep = ({
         setShowZoningAlert(true);
         setValidationMessage({ 
           type: 'error', 
-          message: 'Error parsing CSV file. Please check the format.' 
+          message: error instanceof Error ? error.message : 'Error parsing CSV file. Please check the format.' 
+        });
+        
+        toast({
+          title: "Upload Error",
+          description: error instanceof Error ? error.message : 'Error parsing CSV file. Please check the format.',
+          variant: "destructive",
         });
       }
+    };
+    
+    reader.onerror = () => {
+      console.error("FileReader error:", reader.error);
+      setValidationMessage({ 
+        type: 'error', 
+        message: 'Failed to read the file. Please try again.' 
+      });
+      
+      toast({
+        title: "File Error",
+        description: 'Failed to read the file. Please try again.',
+        variant: "destructive",
+      });
     };
     
     reader.readAsText(file);
@@ -175,8 +217,16 @@ const ZoningInfoStep = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const result = parseCSV(event.target?.result as string);
+        if (!event.target?.result) {
+          throw new Error("Failed to read file");
+        }
+        
+        const result = parseCSV(event.target.result as string);
         const { data } = result;
+        
+        if (!data || data.length === 0) {
+          throw new Error("No data found in CSV file");
+        }
         
         // Validate dataset structure
         const validation = validateDatasetStructure(data, "ada");
@@ -187,6 +237,11 @@ const ZoningInfoStep = ({
           setValidationMessage({ 
             type: 'success', 
             message: `Successfully uploaded ${data.length} ADA parking requirement records.` 
+          });
+          
+          toast({
+            title: "Dataset Uploaded",
+            description: `Successfully uploaded ${data.length} ADA parking requirement records.`,
           });
           
           // Recalculate ADA parking if parking required is set
@@ -200,15 +255,42 @@ const ZoningInfoStep = ({
             type: 'error', 
             message: validation.message 
           });
+          
+          toast({
+            title: "Validation Error",
+            description: validation.message,
+            variant: "destructive",
+          });
+          
           console.error("CSV validation failed:", validation.message);
         }
       } catch (error) {
         console.error("Error parsing CSV:", error);
         setValidationMessage({ 
           type: 'error', 
-          message: 'Error parsing CSV file. Please check the format.' 
+          message: error instanceof Error ? error.message : 'Error parsing CSV file. Please check the format.' 
+        });
+        
+        toast({
+          title: "Upload Error",
+          description: error instanceof Error ? error.message : 'Error parsing CSV file. Please check the format.',
+          variant: "destructive",
         });
       }
+    };
+    
+    reader.onerror = () => {
+      console.error("FileReader error:", reader.error);
+      setValidationMessage({ 
+        type: 'error', 
+        message: 'Failed to read the file. Please try again.' 
+      });
+      
+      toast({
+        title: "File Error",
+        description: 'Failed to read the file. Please try again.',
+        variant: "destructive",
+      });
     };
     
     reader.readAsText(file);
