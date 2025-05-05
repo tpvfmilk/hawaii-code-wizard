@@ -140,8 +140,8 @@ const ZoningInfoStep = ({
           onDatasetUploaded("ada", data);
           
           // If parking is already specified, calculate ADA requirement
-          if (zoningData.parkingRequired) {
-            const totalParking = parseInt(zoningData.parkingRequired);
+          if (zoningData.parkingSpaces) {
+            const totalParking = parseInt(zoningData.parkingSpaces);
             const adaResult = calculateADAParking(data, totalParking);
             onZoningDataChange("adaParking", adaResult.required.toString());
           }
@@ -459,9 +459,9 @@ const ZoningInfoStep = ({
             description: `Successfully uploaded ${data.length} ADA parking requirement records.`
           });
 
-          // Recalculate ADA parking if parking required is set
-          if (zoningData.parkingRequired) {
-            const totalParking = parseInt(zoningData.parkingRequired);
+          // Recalculate ADA parking if parking spaces is set
+          if (zoningData.parkingSpaces) {
+            const totalParking = calculateTotalParking();
             const adaResult = calculateADAParking(normalizedData, totalParking);
             onZoningDataChange("adaParking", adaResult.required.toString());
           }

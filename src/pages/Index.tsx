@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -39,7 +38,8 @@ const Index = () => {
     far: "",
     maxHeight: "",
     lotCoverage: "",
-    parkingRequired: "",
+    parkingSpaces: "",  // Changed from parkingRequired
+    parkingUnit: "",    // Added for parking unit 
     adaParking: "",
     isSMA: false,
     isFloodZone: false,
