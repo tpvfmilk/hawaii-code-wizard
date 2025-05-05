@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { Plus, Folder, Edit, Trash, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -15,7 +14,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarTrigger,
   SidebarMenuAction,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -274,7 +272,6 @@ const ProjectSidebar = ({ currentProject, setCurrentProject, projectData }: Proj
       <SidebarHeader>
         <div className="flex items-center justify-between p-2">
           <h3 className="text-lg font-semibold">Projects</h3>
-          <SidebarTrigger />
         </div>
       </SidebarHeader>
       <SidebarContent>
