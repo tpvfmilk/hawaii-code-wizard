@@ -340,27 +340,59 @@ const Dashboard = () => {
     }
     
     // First, delete existing records
-    await getTableRef(tableName).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    const { error: deleteError } = await getTableRef(tableName).delete().neq('id', '00000000-0000-0000-0000-000000000000');
     
-    // Then insert new records
+    if (deleteError) {
+      console.error(`Error deleting existing records: ${deleteError.message}`);
+      throw deleteError;
+    }
+    
+    // Then insert new records (without using ON CONFLICT)
     const { error } = await getTableRef(tableName).insert(data);
     
     if (error) throw error;
     
-    // Update metadata
-    const { error: metaError } = await supabase
-      .from('csv_datasets')
-      .upsert({
-        name: datasets[datasetKey].name,
-        type: tableName,
-        content: JSON.stringify(data.slice(0, 10)), // Store preview data
-        last_updated: new Date().toISOString(),
-        notes: datasets[datasetKey].notes
-      }, {
-        onConflict: 'type'
-      });
+    // Update metadata - fixed to use CSV_DATASETS table correctly
+    try {
+      // First check if record exists
+      const { data: existingData, error: checkError } = await supabase
+        .from('csv_datasets')
+        .select('*')
+        .eq('type', tableName);
+        
+      if (checkError) throw checkError;
       
-    if (metaError) throw metaError;
+      if (existingData && existingData.length > 0) {
+        // Update existing record
+        const { error: updateError } = await supabase
+          .from('csv_datasets')
+          .update({
+            name: datasets[datasetKey].name,
+            content: JSON.stringify(data.slice(0, 10)), // Store preview data
+            last_updated: new Date().toISOString(),
+            notes: datasets[datasetKey].notes
+          })
+          .eq('type', tableName);
+          
+        if (updateError) throw updateError;
+      } else {
+        // Insert new record
+        const { error: insertError } = await supabase
+          .from('csv_datasets')
+          .insert({
+            name: datasets[datasetKey].name,
+            type: tableName,
+            content: JSON.stringify(data.slice(0, 10)), // Store preview data
+            last_updated: new Date().toISOString(),
+            notes: datasets[datasetKey].notes
+          });
+          
+        if (insertError) throw insertError;
+      }
+    } catch (metaError) {
+      console.error('Error updating metadata:', metaError);
+      throw metaError;
+    }
   };
   
   // Handle notes change
