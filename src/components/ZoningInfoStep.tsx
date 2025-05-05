@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +22,7 @@ import {
   debugCSVContent
 } from "@/utils/CSVHelper";
 import { useToast } from "@/hooks/use-toast";
+import { normalizeCSVColumns, logColumnTransformation } from "@/integrations/supabase/client";
 
 interface ZoningInfoStepProps {
   zoningData: {
@@ -146,12 +146,18 @@ const ZoningInfoStep = ({
         
         setPreviewData(data.slice(0, 3)); // Store first 3 rows for preview
         
-        // Validate dataset structure
-        const validation = validateDatasetStructure(data, "zoning");
+        // Normalize CSV column names to match database schema
+        const normalizedData = normalizeCSVColumns(data, "zoning");
+        
+        // Log transformation for debugging
+        logColumnTransformation(data, normalizedData);
+        
+        // Validate dataset structure with normalized data
+        const validation = validateDatasetStructure(normalizedData, "zoning");
         
         if (validation.valid) {
-          onDatasetUploaded("zoning", data);
-          setZoningDataset(data);
+          onDatasetUploaded("zoning", normalizedData);
+          setZoningDataset(normalizedData);
           setShowZoningAlert(false);
           setValidationMessage({ 
             type: 'success', 
@@ -168,7 +174,7 @@ const ZoningInfoStep = ({
           
           // Try to auto-populate if district already selected
           if (zoningData.zoningDistrict && jurisdiction) {
-            const match = findZoningMatch(data, jurisdiction, zoningData.zoningDistrict);
+            const match = findZoningMatch(normalizedData, jurisdiction, zoningData.zoningDistrict);
             if (match) {
               // Auto-fill fields from the dataset
               if (match.front_setback && match.side_setback && match.rear_setback) {
@@ -275,12 +281,18 @@ const ZoningInfoStep = ({
           throw new Error("No data found in CSV file");
         }
         
-        // Validate dataset structure
-        const validation = validateDatasetStructure(data, "ada");
+        // Normalize CSV column names to match database schema
+        const normalizedData = normalizeCSVColumns(data, "ada");
+        
+        // Log transformation for debugging
+        logColumnTransformation(data, normalizedData);
+        
+        // Validate dataset structure with normalized data
+        const validation = validateDatasetStructure(normalizedData, "ada");
         
         if (validation.valid) {
-          onDatasetUploaded("ada", data);
-          setAdaDataset(data);
+          onDatasetUploaded("ada", normalizedData);
+          setAdaDataset(normalizedData);
           setValidationMessage({ 
             type: 'success', 
             message: `Successfully uploaded ${data.length} ADA parking requirement records.` 
@@ -294,7 +306,7 @@ const ZoningInfoStep = ({
           // Recalculate ADA parking if parking required is set
           if (zoningData.parkingRequired) {
             const totalParking = parseInt(zoningData.parkingRequired);
-            const adaResult = calculateADAParking(data, totalParking);
+            const adaResult = calculateADAParking(normalizedData, totalParking);
             onZoningDataChange("adaParking", adaResult.required.toString());
           }
         } else {
@@ -317,7 +329,7 @@ const ZoningInfoStep = ({
         
         setValidationMessage({ 
           type: 'error', 
-          message: errorMessage 
+          message: errorMessage
         });
         
         toast({
@@ -371,8 +383,12 @@ const ZoningInfoStep = ({
       
       {showZoningAlert && (
         <Alert className="mb-4 bg-amber-50 border-amber-200">
+          <AlertTitle>CSV Format Guideline</AlertTitle>
           <AlertDescription>
             {requiredDatasets.zoning.prompt}
+            <div className="text-xs mt-2">
+              <p><strong>Required column names:</strong> county, zoning_district, front_setback, side_setback, rear_setback, max_far, max_height, max_lot_coverage, parking_required, ada_stalls_required</p>
+            </div>
           </AlertDescription>
         </Alert>
       )}
@@ -637,4 +653,3 @@ const ZoningInfoStep = ({
 }
 
 export default ZoningInfoStep;
-

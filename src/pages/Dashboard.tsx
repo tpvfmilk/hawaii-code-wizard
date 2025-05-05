@@ -32,13 +32,12 @@ import {
   FileDown, 
   AlertCircle, 
   CheckCircle2, 
-  X
+  X,
+  Info
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { parseCSV } from "@/utils/CSVHelper";
-import { supabase } from "@/integrations/supabase/client";
-import { SupabaseClient } from '@supabase/supabase-js';
-import { Database } from "@/integrations/supabase/types";
+import { parseCSV, debugCSVContent } from "@/utils/CSVHelper";
+import { supabase, normalizeCSVColumns, logColumnTransformation } from "@/integrations/supabase/client";
 
 // Define literal type for valid table names in our database
 type TableName = 'zoning_standards' | 'parking_requirements' | 'ada_requirements' | 'csv_datasets';
@@ -103,6 +102,10 @@ const Dashboard = () => {
     parking: "",
     ada: ""
   });
+  
+  // Debug state
+  const [debugMode, setDebugMode] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
   
   // Fetch datasets on component mount
   useEffect(() => {
@@ -231,17 +234,33 @@ const Dashboard = () => {
       
       // Parse CSV file
       const fileContent = await file.text();
+      
+      // Debug information
+      const debug = debugCSVContent(fileContent);
+      setDebugInfo(debug);
+      
       const parsedCSV = parseCSV(fileContent);
       
       if (!parsedCSV.data || parsedCSV.data.length === 0) {
         throw new Error('Invalid CSV format or empty file');
       }
       
+      console.log("Original CSV data:", parsedCSV.data[0]);
+      
+      // Normalize CSV columns to match database schema
+      const normalizedData = normalizeCSVColumns(
+        parsedCSV.data, 
+        datasetKey as 'zoning' | 'parking' | 'ada'
+      );
+      
+      // Log transformation for debugging
+      logColumnTransformation(parsedCSV.data, normalizedData);
+      
       // Validate required columns for each dataset type
-      validateColumns(parsedCSV.data[0], datasetKey);
+      validateColumns(normalizedData[0], datasetKey);
       
       // Save to Supabase
-      await saveDataset(datasetKey, parsedCSV.data);
+      await saveDataset(datasetKey, normalizedData);
       
       // Update local state
       setDatasets(prev => ({
@@ -250,7 +269,7 @@ const Dashboard = () => {
           ...prev[datasetKey],
           status: 'loaded',
           lastUpdated: new Date().toISOString(),
-          data: parsedCSV.data
+          data: normalizedData
         }
       }));
       
@@ -275,6 +294,9 @@ const Dashboard = () => {
         description: error instanceof Error ? error.message : "Failed to process the CSV file.",
         variant: "destructive"
       });
+      
+      // Show debug information
+      setDebugMode(true);
     } finally {
       // Reset file input
       if (datasetKey === 'zoning' && zoningInputRef.current) {
@@ -296,9 +318,7 @@ const Dashboard = () => {
     };
     
     const missingColumns = requiredColumns[datasetKey].filter(
-      col => !Object.keys(headers).some(header => 
-        header.toLowerCase().replace(/[^a-z0-9]/g, '_') === col
-      )
+      col => !Object.keys(headers).includes(col)
     );
     
     if (missingColumns.length > 0) {
@@ -514,12 +534,23 @@ const Dashboard = () => {
             <h1 className="text-3xl font-bold text-primary">Data Dashboard</h1>
             <p className="text-gray-600 mt-1">Manage CSV datasets for the Hawaii Code Wizard</p>
           </div>
-          <Link to="/">
-            <Button variant="outline" className="flex items-center gap-2">
-              <ArrowLeft className="w-4 h-4" /> 
-              Back to Wizard
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => setDebugMode(!debugMode)}
+              className="flex items-center gap-1"
+            >
+              <Info className="w-4 h-4" />
+              {debugMode ? 'Hide Debug' : 'Show Debug'}
             </Button>
-          </Link>
+            <Link to="/">
+              <Button variant="outline" className="flex items-center gap-2">
+                <ArrowLeft className="w-4 h-4" /> 
+                Back to Wizard
+              </Button>
+            </Link>
+          </div>
         </header>
         
         <Card className="mb-8">
@@ -530,6 +561,51 @@ const Dashboard = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {debugMode && (
+              <Alert className="mb-6 bg-blue-50 border-blue-200">
+                <AlertTitle className="text-blue-800 flex items-center gap-2">
+                  <Info className="w-4 h-4" />
+                  CSV Column Mapping Guidelines
+                </AlertTitle>
+                <AlertDescription className="text-blue-700">
+                  <p className="mb-2">Your CSV file's column names must match these formats:</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <strong>Zoning Standards:</strong>
+                      <ul className="list-disc ml-5">
+                        <li>county</li>
+                        <li>zoning_district</li>
+                        <li>front_setback</li>
+                        <li>side_setback</li>
+                        <li>rear_setback</li>
+                        <li>max_far</li>
+                        <li>max_height</li>
+                        <li>max_lot_coverage</li>
+                        <li>parking_required</li>
+                        <li>ada_stalls_required</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <strong>Parking Requirements:</strong>
+                      <ul className="list-disc ml-5">
+                        <li>county</li>
+                        <li>use_type</li>
+                        <li>parking_requirement</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <strong>ADA Requirements:</strong>
+                      <ul className="list-disc ml-5">
+                        <li>total_parking_spaces_provided</li>
+                        <li>minimum_required_ada_stalls</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs">Note: The app will try to normalize column names, but it's best to match these exactly.</p>
+                </AlertDescription>
+              </Alert>
+            )}
+          
             <div className="grid md:grid-cols-3 gap-6">
               {/* Zoning Standards Upload */}
               <div className="space-y-2">
@@ -633,6 +709,21 @@ const Dashboard = () => {
                   Some required data files are missing. The wizard may not function correctly until all files are uploaded.
                 </AlertDescription>
               </Alert>
+            )}
+            
+            {/* Debug Information */}
+            {debugMode && debugInfo && (
+              <div className="mt-6 bg-gray-50 border rounded-md p-4">
+                <h3 className="text-sm font-medium mb-2">CSV Debug Information</h3>
+                <div className="text-xs max-h-64 overflow-y-auto">
+                  <p className="font-medium">Summary: {debugInfo.summary}</p>
+                  <p className="mt-1">First Row:</p>
+                  <pre className="bg-gray-100 p-2 rounded overflow-x-auto">{debugInfo.firstRow}</pre>
+                  
+                  <p className="mt-2">First Few Rows:</p>
+                  <pre className="bg-gray-100 p-2 rounded overflow-x-auto">{JSON.stringify(debugInfo.firstFewRows, null, 2)}</pre>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

@@ -2,12 +2,13 @@
 import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { requiredDatasets } from "@/data/codeData";
 import { parseCSV, validateDatasetStructure, debugCSVContent } from "@/utils/CSVHelper";
 import { useToast } from "@/hooks/use-toast";
+import { normalizeCSVColumns, logColumnTransformation } from "@/integrations/supabase/client";
 
 interface LifeSafetyStepProps {
   lifeSafetyData: {
@@ -116,20 +117,30 @@ const LifeSafetyStep = ({
         // Parse CSV
         const result = parseCSV(fileContent);
         
-        // Validate dataset structure
-        const validation = validateDatasetStructure(result, "egressRequirements");
+        if (!result.data || result.data.length === 0) {
+          throw new Error("No data found in CSV file");
+        }
+        
+        // Normalize CSV column names
+        const normalizedData = normalizeCSVColumns(result.data, "zoning"); // Using zoning as fallback
+        
+        // Log transformation for debugging
+        logColumnTransformation(result.data, normalizedData);
+        
+        // Validate dataset structure with normalized data
+        const validation = validateDatasetStructure(normalizedData, "egressRequirements");
         
         if (validation.valid) {
-          onDatasetUploaded("egressRequirements", result.data);
+          onDatasetUploaded("egressRequirements", normalizedData);
           setShowEgressAlert(false);
           setValidationMessage({ 
             type: 'success', 
-            message: `Successfully uploaded ${result.data.length} egress requirement records.` 
+            message: `Successfully uploaded ${normalizedData.length} egress requirement records.` 
           });
           
           toast({
             title: "Dataset Uploaded",
-            description: `Successfully uploaded ${result.data.length} egress requirement records.`,
+            description: `Successfully uploaded ${normalizedData.length} egress requirement records.`,
           });
           
           // Auto-populate fields if possible
@@ -193,6 +204,7 @@ const LifeSafetyStep = ({
       
       {showEgressAlert && (
         <Alert className="mb-4 bg-amber-50 border-amber-200">
+          <AlertTitle>CSV Format Guideline</AlertTitle>
           <AlertDescription>
             {requiredDatasets.egressRequirements.prompt}
           </AlertDescription>
@@ -412,4 +424,3 @@ const LifeSafetyStep = ({
 }
 
 export default LifeSafetyStep;
-

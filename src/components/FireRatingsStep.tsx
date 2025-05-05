@@ -2,12 +2,13 @@
 import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { requiredDatasets } from "@/data/codeData";
 import { parseCSV, validateDatasetStructure, debugCSVContent } from "@/utils/CSVHelper";
 import { useToast } from "@/hooks/use-toast";
+import { normalizeCSVColumns, logColumnTransformation } from "@/integrations/supabase/client";
 
 interface FireRatingsStepProps {
   fireData: {
@@ -68,20 +69,30 @@ const FireRatingsStep = ({
         // Parse CSV
         const result = parseCSV(fileContent);
         
-        // Validate dataset structure
-        const validation = validateDatasetStructure(result, "fireRatings");
+        if (!result.data || result.data.length === 0) {
+          throw new Error("No data found in CSV file");
+        }
+        
+        // Normalize the CSV column names
+        const normalizedData = normalizeCSVColumns(result.data, "zoning"); // Using zoning as fallback
+        
+        // Log transformation for debugging
+        logColumnTransformation(result.data, normalizedData);
+        
+        // Validate dataset structure with normalized data
+        const validation = validateDatasetStructure(normalizedData, "fireRatings");
         
         if (validation.valid) {
-          onDatasetUploaded("fireRatings", result.data);
+          onDatasetUploaded("fireRatings", normalizedData);
           setShowFireAlert(false);
           setValidationMessage({ 
             type: 'success', 
-            message: `Successfully uploaded ${result.data.length} fire rating records.` 
+            message: `Successfully uploaded ${normalizedData.length} fire rating records.` 
           });
           
           toast({
             title: "Dataset Uploaded",
-            description: `Successfully uploaded ${result.data.length} fire rating records.`,
+            description: `Successfully uploaded ${normalizedData.length} fire rating records.`,
           });
           
           // Auto-populate fields if possible
@@ -194,6 +205,7 @@ const FireRatingsStep = ({
       
       {showFireAlert && (
         <Alert className="mb-4 bg-amber-50 border-amber-200">
+          <AlertTitle>CSV Format Guideline</AlertTitle>
           <AlertDescription>
             {requiredDatasets.fireRatings.prompt}
           </AlertDescription>
@@ -350,4 +362,3 @@ const FireRatingsStep = ({
 }
 
 export default FireRatingsStep;
-
