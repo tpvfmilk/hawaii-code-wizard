@@ -5,6 +5,8 @@ import { parseCSV, checkRequiredColumns, validateDatasetStructure, calculateADAP
 import { useToast } from "@/hooks/use-toast";
 import { normalizeCSVColumns, logColumnTransformation, supabase } from "@/integrations/supabase/client";
 import { findZoningMatch, findZoningMatchWithDebug } from "@/utils/matchingUtils";
+import { parseParking, formatParking } from "@/utils/matchingUtils";
+import ParkingRequirementField from "./zoning/ParkingRequirementField";
 
 // Import our new components
 import ZoningDistrictSelector from "./zoning/ZoningDistrictSelector";
@@ -25,7 +27,8 @@ interface ZoningInfoStepProps {
     far: string;
     maxHeight: string;
     lotCoverage: string;
-    parkingRequired: string;
+    parkingSpaces: string;  // Changed from parkingRequired
+    parkingUnit: string;    // New field for parking unit
     adaParking: string;
     isSMA: boolean;
     isFloodZone: boolean;
@@ -219,12 +222,17 @@ const ZoningInfoStep = ({
         newPopulatedFields.push('lotCoverage');
       }
       if (match.parking_required) {
-        onZoningDataChange('parkingRequired', match.parking_required.toString());
-        newPopulatedFields.push('parkingRequired');
+        // Parse the parking requirement into spaces and unit
+        const { spaces, unit } = parseParking(match.parking_required);
+        onZoningDataChange('parkingSpaces', spaces);
+        onZoningDataChange('parkingUnit', unit);
+        newPopulatedFields.push('parkingSpaces');
+        newPopulatedFields.push('parkingUnit');
         
-        // Also update ADA parking if adaDataset is available
-        if (adaDataset.length > 0) {
-          const totalParking = parseInt(match.parking_required);
+        // Also update ADA parking if parkingSpaces is set
+        if (spaces && adaDataset.length > 0) {
+          // Calculate total parking
+          const totalParking = calculateTotalParking();
           const adaResult = calculateADAParking(adaDataset, totalParking);
           onZoningDataChange("adaParking", adaResult.required.toString());
           newPopulatedFields.push('adaParking');
@@ -505,9 +513,12 @@ const ZoningInfoStep = ({
   };
 
   const calculateTotalParking = () => {
-    const parking = parseFloat(zoningData.parkingRequired) || 0;
-    return Math.ceil(parking);
+    // Calculate total parking based on spaces and units
+    // For now, we'll just use the raw spaces value
+    const parkingSpaces = parseFloat(zoningData.parkingSpaces) || 0;
+    return Math.ceil(parkingSpaces);
   };
+  
   const totalParking = calculateTotalParking();
 
   // Calculate ADA parking whenever total parking changes
@@ -519,7 +530,7 @@ const ZoningInfoStep = ({
       const adaRequired = calculateADAParking([], totalParking);
       onZoningDataChange("adaParking", adaRequired.required.toString());
     }
-  }, [zoningData.parkingRequired, adaDataset]);
+  }, [zoningData.parkingSpaces, adaDataset]);
   
   // Helper function to determine if a field was recently populated
   const isFieldPopulated = (fieldName: string) => {
@@ -658,15 +669,13 @@ const ZoningInfoStep = ({
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <ZoningDataField 
-            id="parkingRequired"
-            label="Parking Required (spaces)"
-            type="number"
-            min="0"
-            placeholder="Enter required parking spaces"
-            value={zoningData.parkingRequired}
-            onChange={(value) => handleFieldChange("parkingRequired", value)}
-            isPopulated={isFieldPopulated("parkingRequired")}
+          <ParkingRequirementField
+            spaces={zoningData.parkingSpaces}
+            unit={zoningData.parkingUnit}
+            onSpacesChange={(value) => handleFieldChange("parkingSpaces", value)}
+            onUnitChange={(value) => handleFieldChange("parkingUnit", value)}
+            isPopulated={isFieldPopulated("parkingSpaces")}
+            tooltip="Specify parking spaces required and the basis (e.g., 2 spaces per dwelling unit)"
           />
           
           <ZoningDataField 

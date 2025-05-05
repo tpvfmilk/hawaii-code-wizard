@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useProject } from '@/hooks/use-project';
 import { Link } from "react-router-dom";
@@ -349,6 +348,25 @@ const Dashboard = () => {
       throw new Error(`Invalid dataset key: ${datasetKey}`);
     }
     
+    // Process parking data if this is zoning data
+    let processedData = [...data];
+    if (datasetKey === 'zoning') {
+      // Format any split parking fields back to combined format
+      processedData = data.map(item => {
+        const newItem = {...item};
+        
+        // If we have separate parking spaces and unit fields that came from editing
+        if (newItem.parking_spaces && newItem.parking_unit) {
+          newItem.parking_required = `${newItem.parking_spaces} / ${newItem.parking_unit}`;
+          // Clean up the temporary fields
+          delete newItem.parking_spaces;
+          delete newItem.parking_unit;
+        }
+        
+        return newItem;
+      });
+    }
+    
     // First, delete existing records
     const { error: deleteError } = await getTableRef(tableName).delete().neq('id', '00000000-0000-0000-0000-000000000000');
     
@@ -358,11 +376,11 @@ const Dashboard = () => {
     }
     
     // Then insert new records (without using ON CONFLICT)
-    const { error } = await getTableRef(tableName).insert(data);
+    const { error } = await getTableRef(tableName).insert(processedData);
     
     if (error) throw error;
     
-    // Update metadata - fixed to use CSV_DATASETS table correctly
+    // Update metadata
     try {
       // First check if record exists
       const { data: existingData, error: checkError } = await supabase
