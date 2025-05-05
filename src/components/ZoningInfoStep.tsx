@@ -1,17 +1,21 @@
 
 import React, { useState, useEffect } from "react";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { zoningDistricts, requiredDatasets } from "@/data/codeData";
 import { parseCSV, checkRequiredColumns, findZoningMatch, validateDatasetStructure, calculateADAParking, debugCSVContent } from "@/utils/CSVHelper";
 import { useToast } from "@/hooks/use-toast";
 import { normalizeCSVColumns, logColumnTransformation, supabase } from "@/integrations/supabase/client";
-import { Loader2, Check, AlertCircle, RefreshCw, Info } from "lucide-react";
+
+// Import our new components
+import ZoningDistrictSelector from "./zoning/ZoningDistrictSelector";
+import ValidationMessage from "./zoning/ValidationMessage";
+import DatasetPreview from "./zoning/DatasetPreview";
+import DebugInfo from "./zoning/DebugInfo";
+import MatchDetails from "./zoning/MatchDetails";
+import FileUpload from "./zoning/FileUpload";
+import ZoningAlert from "./zoning/ZoningAlert";
+import ZoningDataField from "./zoning/ZoningDataField";
+import ZoningCheckbox from "./zoning/ZoningCheckbox";
 
 interface ZoningInfoStepProps {
   zoningData: {
@@ -533,325 +537,188 @@ const ZoningInfoStep = ({
     }
   };
   
-  return <div className="step-container">
+  return (
+    <div className="step-container">
       <h2 className="step-title">
         <span className="step-icon">🏞️</span> Zoning & Site Info
       </h2>
       
-      {showZoningAlert && <Alert className="mb-4 bg-amber-50 border-amber-200">
-          <AlertTitle>CSV Format Guideline</AlertTitle>
-          <AlertDescription>
-            {requiredDatasets.zoning.prompt}
-            <div className="text-xs mt-2">
-              <p><strong>Required column names:</strong> county, zoning_district, front_setback, side_setback, rear_setback, max_far, max_height, max_lot_coverage, parking_required, ada_stalls_required</p>
-            </div>
-          </AlertDescription>
-        </Alert>}
+      <ZoningAlert show={showZoningAlert} />
       
-      {validationMessage.message && <Alert className={`mb-4 ${validationMessage.type === 'success' ? 'bg-green-50 border-green-200' : validationMessage.type === 'error' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
-          {validationMessage.type === 'success' && <Check className="h-4 w-4 text-green-500 mr-2" />}
-          {validationMessage.type === 'error' && <AlertCircle className="h-4 w-4 text-red-500 mr-2" />}
-          <AlertDescription className="flex items-center">
-            {validationMessage.message}
-          </AlertDescription>
-        </Alert>}
+      <ValidationMessage 
+        type={validationMessage.type} 
+        message={validationMessage.message} 
+      />
       
-      {showPreview && previewData.length > 0 && <div className="mb-4 overflow-auto">
-          <h3 className="text-sm font-medium mb-2">Dataset Preview (first 3 rows):</h3>
-          <div className="text-xs bg-gray-50 p-2 rounded border max-h-32 overflow-y-auto">
-            <pre>{JSON.stringify(previewData, null, 2)}</pre>
-          </div>
-          <Button variant="ghost" size="sm" className="mt-1" onClick={() => setShowPreview(false)}>
-            Hide Preview
-          </Button>
-        </div>}
+      <DatasetPreview 
+        showPreview={showPreview} 
+        previewData={previewData} 
+        setShowPreview={setShowPreview} 
+      />
       
-      {showDebugInfo && debugInfo && <div className="mb-4 overflow-auto bg-gray-50 p-3 rounded border">
-          <h3 className="text-sm font-medium mb-2">CSV Debug Info:</h3>
-          <div className="text-xs max-h-48 overflow-y-auto">
-            <p className="font-semibold">Summary: {debugInfo.summary}</p>
-            <p className="mt-1">First Row: "{debugInfo.firstRow}"</p>
-            <p className="mt-1">Character Codes:</p>
-            <pre className="bg-gray-100 p-1 mt-1">{JSON.stringify(debugInfo.charCodes)}</pre>
-            <p className="mt-1">First Few Rows:</p>
-            <pre className="bg-gray-100 p-1 mt-1">{JSON.stringify(debugInfo.firstFewRows, null, 2)}</pre>
-          </div>
-          <Button variant="ghost" size="sm" className="mt-1" onClick={() => setShowDebugInfo(false)}>
-            Hide Debug Info
-          </Button>
-        </div>}
+      <DebugInfo 
+        showDebugInfo={showDebugInfo} 
+        debugInfo={debugInfo} 
+        setShowDebugInfo={setShowDebugInfo} 
+      />
       
-      {showMatchDetails && attemptedMatch && <div className="mb-4 overflow-auto bg-gray-50 p-3 rounded border">
-          <h3 className="text-sm font-medium mb-2">Matching Debug Info:</h3>
-          <div className="text-xs max-h-48 overflow-y-auto">
-            <p className="font-semibold">Attempted match for: {attemptedMatch}</p>
-            <p className="mt-1">Available zoning records in dataset: {zoningDataset.length}</p>
-            <p className="mt-1">Jurisdiction: {jurisdiction}</p>
-            <p className="mt-1">First 3 zoning records:</p>
-            <pre className="bg-gray-100 p-1 mt-1">
-              {JSON.stringify(zoningDataset.slice(0, 3).map(z => ({
-                jurisdiction: z.county,
-                district: z.zoning_district,
-              })), null, 2)}
-            </pre>
-          </div>
-          <Button variant="ghost" size="sm" className="mt-1" onClick={() => setShowMatchDetails(false)}>
-            Hide Match Debug Info
-          </Button>
-        </div>}
+      <MatchDetails 
+        showMatchDetails={showMatchDetails} 
+        attemptedMatch={attemptedMatch} 
+        zoningDataset={zoningDataset}
+        jurisdiction={jurisdiction}
+        setShowMatchDetails={setShowMatchDetails} 
+      />
       
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="zoningDistrict">Zoning</Label>
-            <div className="relative">
-              <Select 
-                value={zoningData.zoningDistrict} 
-                onValueChange={value => handleFieldChange("zoningDistrict", value)}
-                disabled={loadingZoningData}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingZoningData ? "Loading zoning data..." : "Select zoning district"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredDistricts.map(district => (
-                    <SelectItem key={district.id} value={district.id}>
-                      {district.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {loadingZoningData && (
-                <div className="absolute right-10 top-2">
-                  <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {!loadingZoningData && zoningDataset.length > 0 && (
-                <Button 
-                  type="button" 
-                  variant={populationAttempted && lastPopulationSuccess ? "outline" : "default"} 
-                  size="sm" 
-                  className={`mt-2 flex-1 ${populationAttempted && lastPopulationSuccess ? 'bg-green-50 border-green-300 hover:bg-green-100 text-green-700' : populationAttempted ? 'bg-amber-50 border-amber-300 hover:bg-amber-100 text-amber-700' : ''}`}
-                  onClick={populateZoningFields}
-                  disabled={!zoningData.zoningDistrict || isLoading}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Applying...
-                    </>
-                  ) : populationAttempted && lastPopulationSuccess ? (
-                    <>
-                      <Check className="mr-2 h-4 w-4" />
-                      Applied Successfully
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      Apply Zoning Standards
-                    </>
-                  )}
-                </Button>
-              )}
-              
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-2"
-                onClick={() => setShowMatchDetails(!showMatchDetails)}
-              >
-                <Info className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="lotArea">Lot Area (SF)</Label>
-            <Input 
-              id="lotArea" 
-              type="number" 
-              placeholder="Enter lot area in square feet" 
-              value={zoningData.lotArea} 
-              onChange={e => handleFieldChange("lotArea", e.target.value)} 
+            <ZoningDistrictSelector
+              zoningDistrict={zoningData.zoningDistrict}
+              onChange={(value) => handleFieldChange("zoningDistrict", value)}
+              districts={filteredDistricts}
+              onApplyStandards={populateZoningFields}
+              isLoading={isLoading}
+              loadingZoningData={loadingZoningData}
+              populationAttempted={populationAttempted}
+              lastPopulationSuccess={lastPopulationSuccess}
+              showMatchDetails={showMatchDetails}
+              setShowMatchDetails={setShowMatchDetails}
             />
           </div>
+          
+          <ZoningDataField 
+            id="lotArea"
+            label="Lot Area (SF)"
+            type="number"
+            placeholder="Enter lot area in square feet"
+            value={zoningData.lotArea}
+            onChange={(value) => handleFieldChange("lotArea", value)}
+          />
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <Label htmlFor="setbacks">Setbacks (ft)</Label>
-                    <Input 
-                      id="setbacks" 
-                      placeholder="Front, Side, Rear (e.g. 10,5,10)" 
-                      value={zoningData.setbacks} 
-                      onChange={e => handleFieldChange("setbacks", e.target.value)} 
-                      className={isFieldPopulated("setbacks") ? "border-green-400 bg-green-50 transition-all duration-300" : ""}
-                    />
-                    {isFieldPopulated("setbacks") && (
-                      <p className="text-xs text-green-600 mt-1">Auto-populated from zoning data</p>
-                    )}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Format as Front,Side,Rear in feet</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
+          <ZoningDataField 
+            id="setbacks"
+            label="Setbacks (ft)"
+            placeholder="Front, Side, Rear (e.g. 10,5,10)"
+            value={zoningData.setbacks}
+            onChange={(value) => handleFieldChange("setbacks", value)}
+            isPopulated={isFieldPopulated("setbacks")}
+            tooltip="Format as Front,Side,Rear in feet"
+          />
           
-          <div className="space-y-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <Label htmlFor="far">Floor Area Ratio (FAR)</Label>
-                    <Input 
-                      id="far" 
-                      type="number" 
-                      step="0.1" 
-                      placeholder="Enter FAR" 
-                      value={zoningData.far} 
-                      onChange={e => handleFieldChange("far", e.target.value)}
-                      className={isFieldPopulated("far") ? "border-green-400 bg-green-50 transition-all duration-300" : ""} 
-                    />
-                    {isFieldPopulated("far") && (
-                      <p className="text-xs text-green-600 mt-1">Auto-populated from zoning data</p>
-                    )}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Maximum Floor Area Ratio permitted</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
+          <ZoningDataField 
+            id="far"
+            label="Floor Area Ratio (FAR)"
+            type="number"
+            step="0.1"
+            placeholder="Enter FAR"
+            value={zoningData.far}
+            onChange={(value) => handleFieldChange("far", value)}
+            isPopulated={isFieldPopulated("far")}
+            tooltip="Maximum Floor Area Ratio permitted"
+          />
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="maxHeight">Max Height (ft)</Label>
-            <Input 
-              id="maxHeight" 
-              type="number" 
-              placeholder="Enter maximum height" 
-              value={zoningData.maxHeight} 
-              onChange={e => handleFieldChange("maxHeight", e.target.value)} 
-              className={isFieldPopulated("maxHeight") ? "border-green-400 bg-green-50 transition-all duration-300" : ""}
-            />
-            {isFieldPopulated("maxHeight") && (
-              <p className="text-xs text-green-600 mt-1">Auto-populated from zoning data</p>
-            )}
-          </div>
+          <ZoningDataField 
+            id="maxHeight"
+            label="Max Height (ft)"
+            type="number"
+            placeholder="Enter maximum height"
+            value={zoningData.maxHeight}
+            onChange={(value) => handleFieldChange("maxHeight", value)}
+            isPopulated={isFieldPopulated("maxHeight")}
+          />
           
-          <div className="space-y-2">
-            <Label htmlFor="lotCoverage">Lot Coverage (%)</Label>
-            <Input 
-              id="lotCoverage" 
-              type="number" 
-              min="0" 
-              max="100" 
-              placeholder="Enter lot coverage percentage" 
-              value={zoningData.lotCoverage} 
-              onChange={e => handleFieldChange("lotCoverage", e.target.value)} 
-              className={isFieldPopulated("lotCoverage") ? "border-green-400 bg-green-50 transition-all duration-300" : ""}
-            />
-            {isFieldPopulated("lotCoverage") && (
-              <p className="text-xs text-green-600 mt-1">Auto-populated from zoning data</p>
-            )}
-          </div>
+          <ZoningDataField 
+            id="lotCoverage"
+            label="Lot Coverage (%)"
+            type="number"
+            min="0"
+            max="100"
+            placeholder="Enter lot coverage percentage"
+            value={zoningData.lotCoverage}
+            onChange={(value) => handleFieldChange("lotCoverage", value)}
+            isPopulated={isFieldPopulated("lotCoverage")}
+          />
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="parkingRequired">Parking Required (spaces)</Label>
-            <Input 
-              id="parkingRequired" 
-              type="number" 
-              min="0" 
-              placeholder="Enter required parking spaces" 
-              value={zoningData.parkingRequired} 
-              onChange={e => handleFieldChange("parkingRequired", e.target.value)} 
-              className={isFieldPopulated("parkingRequired") ? "border-green-400 bg-green-50 transition-all duration-300" : ""}
-            />
-            {isFieldPopulated("parkingRequired") && (
-              <p className="text-xs text-green-600 mt-1">Auto-populated from zoning data</p>
-            )}
-          </div>
+          <ZoningDataField 
+            id="parkingRequired"
+            label="Parking Required (spaces)"
+            type="number"
+            min="0"
+            placeholder="Enter required parking spaces"
+            value={zoningData.parkingRequired}
+            onChange={(value) => handleFieldChange("parkingRequired", value)}
+            isPopulated={isFieldPopulated("parkingRequired")}
+          />
           
-          <div className="space-y-2">
-            <Label htmlFor="adaParking">ADA Parking Required</Label>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Input 
-                  id="adaParking" 
-                  type="number" 
-                  min="0" 
-                  readOnly 
-                  value={zoningData.adaParking} 
-                  className={`bg-gray-50 ${isFieldPopulated("adaParking") ? "border-green-400 bg-green-50" : ""}`} 
-                />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Automatically calculated based on total parking spaces</p>
-              </TooltipContent>
-            </Tooltip>
-            {isFieldPopulated("adaParking") && (
-              <p className="text-xs text-green-600 mt-1">Auto-calculated based on parking requirements</p>
-            )}
-          </div>
+          <ZoningDataField 
+            id="adaParking"
+            label="ADA Parking Required"
+            type="number"
+            min="0"
+            readOnly={true}
+            value={zoningData.adaParking}
+            onChange={(value) => handleFieldChange("adaParking", value)}
+            isPopulated={isFieldPopulated("adaParking")}
+            tooltip="Automatically calculated based on total parking spaces"
+          />
         </div>
         
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
-          <div className="flex items-center space-x-2">
-            <Checkbox id="isSMA" checked={zoningData.isSMA} onCheckedChange={checked => handleFieldChange("isSMA", Boolean(checked))} />
-            <Label htmlFor="isSMA">SMA</Label>
-          </div>
+          <ZoningCheckbox 
+            id="isSMA"
+            label="SMA"
+            checked={zoningData.isSMA}
+            onCheckedChange={(checked) => handleFieldChange("isSMA", checked)}
+          />
           
-          <div className="flex items-center space-x-2">
-            <Checkbox id="isFloodZone" checked={zoningData.isFloodZone} onCheckedChange={checked => handleFieldChange("isFloodZone", Boolean(checked))} />
-            <Label htmlFor="isFloodZone">Flood Zone</Label>
-          </div>
+          <ZoningCheckbox 
+            id="isFloodZone"
+            label="Flood Zone"
+            checked={zoningData.isFloodZone}
+            onCheckedChange={(checked) => handleFieldChange("isFloodZone", checked)}
+          />
           
-          <div className="flex items-center space-x-2">
-            <Checkbox id="isLavaZone" checked={zoningData.isLavaZone} onCheckedChange={checked => handleFieldChange("isLavaZone", Boolean(checked))} />
-            <Label htmlFor="isLavaZone">Lava Zone</Label>
-          </div>
+          <ZoningCheckbox 
+            id="isLavaZone"
+            label="Lava Zone"
+            checked={zoningData.isLavaZone}
+            onCheckedChange={(checked) => handleFieldChange("isLavaZone", checked)}
+          />
           
-          <div className="flex items-center space-x-2">
-            <Checkbox id="isHistoricDistrict" checked={zoningData.isHistoricDistrict} onCheckedChange={checked => handleFieldChange("isHistoricDistrict", Boolean(checked))} />
-            <Label htmlFor="isHistoricDistrict">Historic District</Label>
-          </div>
+          <ZoningCheckbox 
+            id="isHistoricDistrict"
+            label="Historic District"
+            checked={zoningData.isHistoricDistrict}
+            onCheckedChange={(checked) => handleFieldChange("isHistoricDistrict", checked)}
+          />
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
-          <div className="file-upload-area border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-primary transition-colors">
-            <label htmlFor="zoningCsvUpload" className="cursor-pointer">
-              <div className="text-center">
-                <p className="text-sm font-medium mb-1">Upload zoning data</p>
-                <p className="text-sm text-gray-500">Upload Zoning_Standards.csv</p>
-              </div>
-              <input id="zoningCsvUpload" type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
-            </label>
-          </div>
+          <FileUpload 
+            id="zoningCsvUpload"
+            title="Upload zoning data"
+            description="Upload Zoning_Standards.csv"
+            onChange={handleFileUpload}
+          />
           
-          <div className="file-upload-area border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-primary transition-colors">
-            <label htmlFor="adaCsvUpload" className="cursor-pointer">
-              <div className="text-center">
-                <p className="text-sm font-medium mb-1">Upload ADA requirements</p>
-                <p className="text-sm text-gray-500">Upload ADA_Stall_Requirements.csv</p>
-              </div>
-              <input id="adaCsvUpload" type="file" accept=".csv" className="hidden" onChange={handleADAFileUpload} />
-            </label>
-          </div>
+          <FileUpload 
+            id="adaCsvUpload"
+            title="Upload ADA requirements"
+            description="Upload ADA_Stall_Requirements.csv"
+            onChange={handleADAFileUpload}
+          />
         </div>
       </div>
-    </div>;
+    </div>
+  );
 };
+
 export default ZoningInfoStep;
