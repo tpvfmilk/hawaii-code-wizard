@@ -1,3 +1,4 @@
+
 // Helper functions for matching zoning, occupancy, construction types
 import { calculateADAParking } from "./CSVHelper";
 
@@ -189,4 +190,22 @@ export const getZoningDistrictName = (districtId: string): string => {
   
   // Return the mapped name if it exists, otherwise return the ID
   return districtMap[districtId.toLowerCase()] || districtId;
+};
+
+/**
+ * Get county name from county ID
+ * @param countyId The county ID (e.g., "honolulu")
+ * @returns The full name of the county
+ */
+export const getCountyName = (countyId: string): string => {
+  if (!countyId) return '';
+  
+  const countyMap: Record<string, string> = {
+    'honolulu': 'City and County of Honolulu',
+    'hawaii': 'County of Hawaii',
+    'maui': 'County of Maui',
+    'kauai': 'County of Kauai',
+  };
+  
+  return countyMap[countyId.toLowerCase()] || countyId;
 };
