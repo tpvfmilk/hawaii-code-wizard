@@ -1,4 +1,3 @@
-
 // Helper functions for matching zoning, occupancy, construction types
 import { calculateADAParking } from "./CSVHelper";
 
@@ -165,4 +164,29 @@ export const formatParking = (spaces: string, unit: string): string => {
   if (!unit) return spaces;
   
   return `${spaces} ${unit}`;
+};
+
+/**
+ * Get zoning district name from ID
+ * @param districtId The zoning district ID
+ * @returns The human-readable name of the district
+ */
+export const getZoningDistrictName = (districtId: string): string => {
+  if (!districtId) return '';
+  
+  // The zoning district ID is typically already a readable name
+  // For districts that use codes, we can expand them here
+  
+  const districtMap: Record<string, string> = {
+    'r5': 'R-5: Residential District',
+    'r10': 'R-10: Residential District',
+    'b1': 'B-1: Neighborhood Business District',
+    'b2': 'B-2: Community Business District',
+    'i1': 'I-1: Limited Industrial District',
+    'i2': 'I-2: Intensive Industrial District',
+    // Add more mappings as needed
+  };
+  
+  // Return the mapped name if it exists, otherwise return the ID
+  return districtMap[districtId.toLowerCase()] || districtId;
 };
