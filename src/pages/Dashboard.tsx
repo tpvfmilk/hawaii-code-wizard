@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useProject } from '@/hooks/use-project';
 import { Link } from "react-router-dom";
@@ -17,7 +16,6 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Table, 
   TableBody, 
@@ -26,16 +24,6 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { 
   ArrowLeft, 
   Upload, 
@@ -46,63 +34,28 @@ import {
   AlertCircle, 
   CheckCircle2, 
   X,
-  Info,
-  Trash2,
-  MoreHorizontal
+  Info
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { parseCSV, debugCSVContent } from "@/utils/CSVHelper";
 import { supabase, normalizeCSVColumns, logColumnTransformation } from "@/integrations/supabase/client";
-import SidebarToggleButton from '@/components/SidebarToggleButton';
 
 // Define literal type for valid table names in our database
 type TableName = 'zoning_standards' | 'parking_requirements' | 'ada_requirements' | 'csv_datasets';
 
-// Define dataset keys as a literal type to ensure type safety
-type DatasetKey = 'zoning' | 'parking' | 'ada';
-
-// Define Hawaii counties
-const HAWAII_COUNTIES = [
-  { id: "honolulu", name: "City and County of Honolulu" },
-  { id: "hawaii", name: "County of Hawaii" },
-  { id: "maui", name: "County of Maui" },
-  { id: "kauai", name: "County of Kauai" }
-];
-
-// Define proper types for our dataset
-type DatasetStatus = "missing" | "loaded" | "uploading";
-
-// Generic row data type that includes index for direct referencing
-interface RowData {
-  [key: string]: any;
-  id?: string | number;
-  index?: number;
-}
-
-// Define cell render function without circular references
-type CellRenderFn = (info: RowData) => React.ReactNode;
-
-// Define column configuration type with non-circular reference
-interface ColumnConfig {
-  header: string;
-  accessorKey: string;
-  cell?: CellRenderFn;
-}
-
 interface DatasetInfo {
   name: string;
   type: string;
-  status: DatasetStatus;
+  status: "missing" | "loaded" | "uploading";
   lastUpdated: string | null;
   notes: string;
-  data: RowData[] | null;
+  data: any[] | null;
 }
 
-// Create strongly typed datasets record
-interface DatasetsState {
-  zoning: DatasetInfo;
-  parking: DatasetInfo;
-  ada: DatasetInfo;
+interface ColumnConfig {
+  header: string;
+  accessorKey: string;
+  cell?: (info: any) => React.ReactNode;
 }
 
 const Dashboard = () => {
@@ -116,8 +69,8 @@ const Dashboard = () => {
       'Data Dashboard';
   }, [currentProject]);
   
-  // Datasets state with explicit type
-  const [datasets, setDatasets] = useState<DatasetsState>({
+  // Datasets state
+  const [datasets, setDatasets] = useState<Record<string, DatasetInfo>>({
     zoning: {
       name: "Zoning Standards",
       type: "zoning_standards",
@@ -144,45 +97,32 @@ const Dashboard = () => {
     }
   });
   
-  // Active tab state - make this typed to match dataset keys
-  const [activeTab, setActiveTab] = useState<DatasetKey>("zoning");
-  
-  // Selected county state
-  const [selectedCounty, setSelectedCounty] = useState<string>("honolulu");
-  
-  // Delete confirmation dialog state
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteAction, setDeleteAction] = useState<() => Promise<void>>(() => async () => {});
-  const [deleteMessage, setDeleteMessage] = useState("");
+  // Active tab state
+  const [activeTab, setActiveTab] = useState("zoning");
   
   // Input refs for file uploads
   const zoningInputRef = useRef<HTMLInputElement>(null);
   const parkingInputRef = useRef<HTMLInputElement>(null);
   const adaInputRef = useRef<HTMLInputElement>(null);
   
-  // Search filters with explicit type
-  const [filters, setFilters] = useState<Record<DatasetKey, string>>({
+  // Search filters
+  const [filters, setFilters] = useState<Record<string, string>>({
     zoning: "",
     parking: "",
     ada: ""
   });
   
-  // Loading state
-  const [isLoading, setIsLoading] = useState(false);
-  
   // Debug state
   const [debugMode, setDebugMode] = useState(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
   
-  // Fetch datasets on component mount or when project/county changes
+  // Fetch datasets on component mount
   useEffect(() => {
-    if (currentProject) {
-      fetchDatasets();
-    }
-  }, [currentProject, selectedCounty]);
+    fetchDatasets();
+  }, []);
   
   // Column configurations for each dataset
-  const columnConfigs: Record<DatasetKey, ColumnConfig[]> = {
+  const columnConfigs: Record<string, ColumnConfig[]> = {
     zoning: [
       { header: "County", accessorKey: "county" },
       { header: "Zoning District", accessorKey: "zoning_district" },
@@ -193,58 +133,16 @@ const Dashboard = () => {
       { header: "Max Height", accessorKey: "max_height" },
       { header: "Max Lot Coverage", accessorKey: "max_lot_coverage" },
       { header: "Parking Required", accessorKey: "parking_required" },
-      { header: "ADA Stalls Required", accessorKey: "ada_stalls_required" },
-      { 
-        header: "Actions", 
-        accessorKey: "actions",
-        cell: (info) => (
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={() => handleDeleteRow(activeTab, info.index ?? 0)}
-            title="Delete row"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )
-      }
+      { header: "ADA Stalls Required", accessorKey: "ada_stalls_required" }
     ],
     parking: [
       { header: "County", accessorKey: "county" },
       { header: "Use Type", accessorKey: "use_type" },
-      { header: "Parking Requirement", accessorKey: "parking_requirement" },
-      { 
-        header: "Actions", 
-        accessorKey: "actions",
-        cell: (info) => (
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={() => handleDeleteRow(activeTab, info.index ?? 0)}
-            title="Delete row"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )
-      }
+      { header: "Parking Requirement", accessorKey: "parking_requirement" }
     ],
     ada: [
       { header: "Total Parking Spaces", accessorKey: "total_parking_spaces_provided" },
-      { header: "Minimum Required ADA Stalls", accessorKey: "minimum_required_ada_stalls" },
-      { 
-        header: "Actions", 
-        accessorKey: "actions",
-        cell: (info) => (
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={() => handleDeleteRow(activeTab, info.index ?? 0)}
-            title="Delete row"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )
-      }
+      { header: "Minimum Required ADA Stalls", accessorKey: "minimum_required_ada_stalls" }
     ]
   };
   
@@ -266,20 +164,11 @@ const Dashboard = () => {
   
   // Function to fetch all datasets from Supabase
   const fetchDatasets = async () => {
-    if (!currentProject) {
-      console.log("No current project, skipping data fetch");
-      return;
-    }
-    
-    setIsLoading(true);
-    
     try {
       // Fetch metadata about uploaded CSV files
       const { data: metaData } = await supabase
         .from('csv_datasets')
-        .select('*')
-        .eq('county', selectedCounty)
-        .eq('project_id', currentProject.id);
+        .select('*');
         
       if (metaData) {
         // Create a temporary copy of the datasets state
@@ -293,9 +182,9 @@ const Dashboard = () => {
               ? 'parking' 
               : 'ada';
               
-          if (updatedDatasets[datasetKey as DatasetKey]) {
-            updatedDatasets[datasetKey as DatasetKey] = {
-              ...updatedDatasets[datasetKey as DatasetKey],
+          if (updatedDatasets[datasetKey]) {
+            updatedDatasets[datasetKey] = {
+              ...updatedDatasets[datasetKey],
               status: 'loaded',
               lastUpdated: record.last_updated,
               notes: record.notes || ''
@@ -304,8 +193,8 @@ const Dashboard = () => {
         });
         
         // Fetch actual data for each dataset
-        for (const key of Object.keys(updatedDatasets) as Array<DatasetKey>) {
-          const tableMap: Record<DatasetKey, TableName> = {
+        for (const key of Object.keys(updatedDatasets)) {
+          const tableMap: Record<string, TableName> = {
             zoning: 'zoning_standards',
             parking: 'parking_requirements',
             ada: 'ada_requirements'
@@ -315,17 +204,11 @@ const Dashboard = () => {
           if (tableName) {
             const { data } = await supabase
               .from(tableName)
-              .select('*')
-              .eq('county', selectedCounty)
-              .eq('project_id', currentProject.id);
+              .select('*');
               
             if (data && data.length > 0) {
-              // Add index to each row for easier reference
-              updatedDatasets[key].data = data.map((row, index) => ({ ...row, index }));
+              updatedDatasets[key].data = data;
               updatedDatasets[key].status = 'loaded';
-            } else {
-              updatedDatasets[key].data = null;
-              updatedDatasets[key].status = 'missing';
             }
           }
         }
@@ -340,22 +223,11 @@ const Dashboard = () => {
         description: "Could not fetch datasets from the database.",
         variant: "destructive"
       });
-    } finally {
-      setIsLoading(false);
     }
   };
   
   // Function to handle file upload
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, datasetKey: DatasetKey) => {
-    if (!currentProject) {
-      toast({
-        title: "No active project",
-        description: "Please select a project before uploading data.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, datasetKey: string) => {
     const file = event.target.files?.[0];
     if (!file) return;
     
@@ -387,24 +259,17 @@ const Dashboard = () => {
       // Normalize CSV columns to match database schema
       const normalizedData = normalizeCSVColumns(
         parsedCSV.data, 
-        datasetKey
+        datasetKey as 'zoning' | 'parking' | 'ada'
       );
       
       // Log transformation for debugging
       logColumnTransformation(parsedCSV.data, normalizedData);
       
-      // Add county and project_id to each row
-      const dataWithMetadata = normalizedData.map(row => ({
-        ...row,
-        county: selectedCounty,
-        project_id: currentProject.id
-      }));
-      
       // Validate required columns for each dataset type
-      validateColumns(dataWithMetadata[0], datasetKey);
+      validateColumns(normalizedData[0], datasetKey);
       
       // Save to Supabase
-      await saveDataset(datasetKey, dataWithMetadata);
+      await saveDataset(datasetKey, normalizedData);
       
       // Update local state
       setDatasets(prev => ({
@@ -413,13 +278,13 @@ const Dashboard = () => {
           ...prev[datasetKey],
           status: 'loaded',
           lastUpdated: new Date().toISOString(),
-          data: dataWithMetadata
+          data: normalizedData
         }
       }));
       
       toast({
         title: "Upload successful",
-        description: `${datasets[datasetKey].name} data has been updated for ${HAWAII_COUNTIES.find(c => c.id === selectedCounty)?.name}.`,
+        description: `${datasets[datasetKey].name} data has been updated.`,
       });
     } catch (error) {
       console.error('Error uploading file:', error);
@@ -454,8 +319,8 @@ const Dashboard = () => {
   };
   
   // Validate required columns for each dataset
-  const validateColumns = (headers: Record<string, any>, datasetKey: DatasetKey) => {
-    const requiredColumns: Record<DatasetKey, string[]> = {
+  const validateColumns = (headers: Record<string, any>, datasetKey: string) => {
+    const requiredColumns: Record<string, string[]> = {
       zoning: ['county', 'zoning_district', 'front_setback', 'side_setback', 'rear_setback'],
       parking: ['county', 'use_type', 'parking_requirement'],
       ada: ['total_parking_spaces_provided', 'minimum_required_ada_stalls']
@@ -471,12 +336,8 @@ const Dashboard = () => {
   };
   
   // Save dataset to Supabase
-  const saveDataset = async (datasetKey: DatasetKey, data: any[]) => {
-    if (!currentProject) {
-      throw new Error("No active project");
-    }
-    
-    const tableMap: Record<DatasetKey, TableName> = {
+  const saveDataset = async (datasetKey: string, data: any[]) => {
+    const tableMap: Record<string, TableName> = {
       zoning: 'zoning_standards',
       parking: 'parking_requirements',
       ada: 'ada_requirements'
@@ -506,18 +367,15 @@ const Dashboard = () => {
       });
     }
     
-    // First, delete existing records for this county and project
-    const { error: deleteError } = await getTableRef(tableName)
-      .delete()
-      .eq('county', selectedCounty)
-      .eq('project_id', currentProject.id);
+    // First, delete existing records
+    const { error: deleteError } = await getTableRef(tableName).delete().neq('id', '00000000-0000-0000-0000-000000000000');
     
     if (deleteError) {
       console.error(`Error deleting existing records: ${deleteError.message}`);
       throw deleteError;
     }
     
-    // Then insert new records
+    // Then insert new records (without using ON CONFLICT)
     const { error } = await getTableRef(tableName).insert(processedData);
     
     if (error) throw error;
@@ -528,9 +386,7 @@ const Dashboard = () => {
       const { data: existingData, error: checkError } = await supabase
         .from('csv_datasets')
         .select('*')
-        .eq('type', tableName)
-        .eq('county', selectedCounty)
-        .eq('project_id', currentProject.id);
+        .eq('type', tableName);
         
       if (checkError) throw checkError;
       
@@ -542,13 +398,9 @@ const Dashboard = () => {
             name: datasets[datasetKey].name,
             content: JSON.stringify(data.slice(0, 10)), // Store preview data
             last_updated: new Date().toISOString(),
-            notes: datasets[datasetKey].notes,
-            county: selectedCounty,
-            project_id: currentProject.id
+            notes: datasets[datasetKey].notes
           })
-          .eq('type', tableName)
-          .eq('county', selectedCounty)
-          .eq('project_id', currentProject.id);
+          .eq('type', tableName);
           
         if (updateError) throw updateError;
       } else {
@@ -560,9 +412,7 @@ const Dashboard = () => {
             type: tableName,
             content: JSON.stringify(data.slice(0, 10)), // Store preview data
             last_updated: new Date().toISOString(),
-            notes: datasets[datasetKey].notes,
-            county: selectedCounty,
-            project_id: currentProject.id
+            notes: datasets[datasetKey].notes
           });
           
         if (insertError) throw insertError;
@@ -574,9 +424,7 @@ const Dashboard = () => {
   };
   
   // Handle notes change
-  const handleNotesChange = async (datasetKey: DatasetKey, notes: string) => {
-    if (!currentProject) return;
-    
+  const handleNotesChange = async (datasetKey: string, notes: string) => {
     setDatasets(prev => ({
       ...prev,
       [datasetKey]: {
@@ -587,19 +435,15 @@ const Dashboard = () => {
     
     // Save notes to database
     try {
-      const tableType = `${datasetKey}_standards`;
-      
       // We need to await the response to access the error property
       const response = await supabase
         .from('csv_datasets')
         .upsert({
           name: datasets[datasetKey].name,
-          type: tableType,
-          notes,
-          county: selectedCounty,
-          project_id: currentProject.id
+          type: `${datasetKey}_standards`,
+          notes
         }, {
-          onConflict: 'type, county, project_id'
+          onConflict: 'type'
         });
         
       // Handle potential error synchronously
@@ -629,26 +473,12 @@ const Dashboard = () => {
   };
   
   // Handle adding a new row
-  const handleAddRow = (datasetKey: DatasetKey) => {
-    if (!currentProject) {
-      toast({
-        title: "No active project",
-        description: "Please select a project before adding data.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    const emptyRow: any = {
-      county: selectedCounty,
-      project_id: currentProject.id
-    };
+  const handleAddRow = (datasetKey: string) => {
+    const emptyRow: any = {};
     
     // Create an empty row with all required columns
     columnConfigs[datasetKey].forEach(column => {
-      if (column.accessorKey !== 'actions') {
-        emptyRow[column.accessorKey] = '';
-      }
+      emptyRow[column.accessorKey] = '';
     });
     
     // Add id for tracking
@@ -665,7 +495,7 @@ const Dashboard = () => {
   };
   
   // Handle cell edit
-  const handleCellEdit = (datasetKey: DatasetKey, rowIndex: number, columnKey: string, value: string) => {
+  const handleCellEdit = (datasetKey: string, rowIndex: number, columnKey: string, value: string) => {
     setDatasets(prev => {
       if (!prev[datasetKey].data) return prev;
       
@@ -685,156 +515,9 @@ const Dashboard = () => {
     });
   };
   
-  // Handle row delete
-  const handleDeleteRow = (datasetKey: DatasetKey, rowIndex: number) => {
-    if (!datasets[datasetKey].data || !currentProject) return;
-    
-    const row = datasets[datasetKey].data![rowIndex];
-    const rowId = row.id;
-    
-    if (!rowId) {
-      console.error("Row is missing ID, cannot delete");
-      return;
-    }
-    
-    // Set up the delete confirmation
-    setDeleteMessage(`Are you sure you want to delete this ${datasetKey} record?`);
-    setDeleteAction(() => async () => {
-      setIsLoading(true);
-      
-      try {
-        // Delete from database if it's a database record (not newly added)
-        if (!rowId.toString().startsWith('new-')) {
-          const tableMap: Record<DatasetKey, TableName> = {
-            zoning: 'zoning_standards',
-            parking: 'parking_requirements',
-            ada: 'ada_requirements'
-          };
-          
-          const tableName = tableMap[datasetKey];
-          
-          if (!tableName) {
-            throw new Error(`Invalid dataset key: ${datasetKey}`);
-          }
-          
-          const { error } = await getTableRef(tableName)
-            .delete()
-            .eq('id', rowId.toString());
-            
-          if (error) throw error;
-        }
-        
-        // Remove from local state
-        setDatasets(prev => {
-          if (!prev[datasetKey].data) return prev;
-          
-          const newData = prev[datasetKey].data!.filter((_, i) => i !== rowIndex);
-          
-          return {
-            ...prev,
-            [datasetKey]: {
-              ...prev[datasetKey],
-              data: newData,
-              status: newData.length > 0 ? 'loaded' : 'missing'
-            }
-          };
-        });
-        
-        toast({
-          title: "Row deleted",
-          description: `The ${datasetKey} record has been deleted.`,
-        });
-      } catch (error) {
-        console.error('Error deleting row:', error);
-        toast({
-          title: "Delete failed",
-          description: "Could not delete the record. Please try again.",
-          variant: "destructive"
-        });
-      } finally {
-        setIsLoading(false);
-        setDeleteDialogOpen(false);
-      }
-    });
-    
-    // Open the confirmation dialog
-    setDeleteDialogOpen(true);
-  };
-  
-  // Handle table clear
-  const handleClearTable = (datasetKey: DatasetKey) => {
-    if (!datasets[datasetKey].data || !currentProject) return;
-    
-    // Set up the delete confirmation
-    setDeleteMessage(`Are you sure you want to clear ALL ${datasetKey} data for ${HAWAII_COUNTIES.find(c => c.id === selectedCounty)?.name}? This action cannot be undone.`);
-    setDeleteAction(() => async () => {
-      setIsLoading(true);
-      
-      try {
-        const tableMap: Record<DatasetKey, TableName> = {
-          zoning: 'zoning_standards',
-          parking: 'parking_requirements',
-          ada: 'ada_requirements'
-        };
-        
-        const tableName = tableMap[datasetKey];
-        
-        if (!tableName) {
-          throw new Error(`Invalid dataset key: ${datasetKey}`);
-        }
-        
-        // Delete all records for this county and project
-        const { error } = await getTableRef(tableName)
-          .delete()
-          .eq('county', selectedCounty)
-          .eq('project_id', currentProject.id);
-          
-        if (error) throw error;
-        
-        // Also delete the metadata record
-        await supabase
-          .from('csv_datasets')
-          .delete()
-          .eq('type', tableName)
-          .eq('county', selectedCounty)
-          .eq('project_id', currentProject.id);
-        
-        // Clear local state
-        setDatasets(prev => ({
-          ...prev,
-          [datasetKey]: {
-            ...prev[datasetKey],
-            data: null,
-            status: 'missing'
-          }
-        }));
-        
-        toast({
-          title: "Table cleared",
-          description: `All ${datasetKey} data for ${HAWAII_COUNTIES.find(c => c.id === selectedCounty)?.name} has been deleted.`,
-        });
-      } catch (error) {
-        console.error('Error clearing table:', error);
-        toast({
-          title: "Clear failed",
-          description: "Could not clear the table. Please try again.",
-          variant: "destructive"
-        });
-      } finally {
-        setIsLoading(false);
-        setDeleteDialogOpen(false);
-      }
-    });
-    
-    // Open the confirmation dialog
-    setDeleteDialogOpen(true);
-  };
-  
   // Save edited data
-  const handleSaveData = async (datasetKey: DatasetKey) => {
-    if (!datasets[datasetKey].data || !currentProject) return;
-    
-    setIsLoading(true);
+  const handleSaveData = async (datasetKey: string) => {
+    if (!datasets[datasetKey].data) return;
     
     try {
       await saveDataset(datasetKey, datasets[datasetKey].data);
@@ -850,23 +533,16 @@ const Dashboard = () => {
         description: "Could not save data to the database.",
         variant: "destructive"
       });
-    } finally {
-      setIsLoading(false);
     }
   };
   
   // Handle download CSV
-  const handleDownloadCSV = (datasetKey: DatasetKey) => {
+  const handleDownloadCSV = (datasetKey: string) => {
     if (!datasets[datasetKey].data) return;
     
     // Convert data to CSV
-    const headers = columnConfigs[datasetKey]
-      .filter(col => col.accessorKey !== 'actions') // Skip action column
-      .map(col => col.header);
-    
-    const keys = columnConfigs[datasetKey]
-      .filter(col => col.accessorKey !== 'actions') // Skip action column
-      .map(col => col.accessorKey);
+    const headers = columnConfigs[datasetKey].map(col => col.header);
+    const keys = columnConfigs[datasetKey].map(col => col.accessorKey);
     
     let csv = headers.join(',') + '\n';
     
@@ -886,22 +562,19 @@ const Dashboard = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.setAttribute('href', url);
-    
-    // Add county to filename
-    const countyName = HAWAII_COUNTIES.find(c => c.id === selectedCounty)?.name.replace(/\s+/g, '_');
-    a.setAttribute('download', `${datasets[datasetKey].name.replace(/\s+/g, '_')}_${countyName}.csv`);
+    a.setAttribute('download', `${datasets[datasetKey].name.replace(/\s+/g, '_')}.csv`);
     a.click();
     
     URL.revokeObjectURL(url);
   };
   
   // Filter data based on search term
-  const getFilteredData = (datasetKey: DatasetKey) => {
+  const getFilteredData = (datasetKey: string) => {
     if (!datasets[datasetKey].data) return [];
     
     const searchTerm = filters[datasetKey].toLowerCase();
     
-    if (!searchTerm) return datasets[datasetKey].data.map((row, i) => ({...row, index: i}));
+    if (!searchTerm) return datasets[datasetKey].data;
     
     return datasets[datasetKey].data!.filter(row => {
       return Object.entries(row).some(([key, value]) => {
@@ -910,18 +583,11 @@ const Dashboard = () => {
         }
         return false;
       });
-    }).map((row, i) => ({...row, index: i}));
-  };
-  
-  // Handle county change
-  const handleCountyChange = (county: string) => {
-    setSelectedCounty(county);
+    });
   };
   
   return (
     <div className="container mx-auto py-8 px-4">
-      <SidebarToggleButton blockHeader={true} />
-      
       <header className="mb-8">
         <div className="flex items-center justify-between">
           <div>
@@ -934,24 +600,7 @@ const Dashboard = () => {
           </div>
         </div>
         
-        {/* County selector */}
-        <div className="mt-4 mb-2">
-          <Label htmlFor="county-selector">County</Label>
-          <Select value={selectedCounty} onValueChange={handleCountyChange}>
-            <SelectTrigger id="county-selector" className="w-full max-w-xs">
-              <SelectValue placeholder="Select County" />
-            </SelectTrigger>
-            <SelectContent>
-              {HAWAII_COUNTIES.map((county) => (
-                <SelectItem key={county.id} value={county.id}>
-                  {county.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        
-        <div className="flex items-center gap-2 mt-4">
+        <div className="flex items-center gap-2">
           <Button 
             variant="outline" 
             size="sm"
@@ -970,18 +619,11 @@ const Dashboard = () => {
         </div>
       </header>
       
-      {/* Loading indicator */}
-      {isLoading && (
-        <div className="w-full fixed top-0 left-0 h-1 bg-primary-foreground">
-          <div className="h-1 bg-primary animate-pulse w-1/2"></div>
-        </div>
-      )}
-      
       <Card className="mb-8">
         <CardHeader>
           <CardTitle>CSV Management</CardTitle>
           <CardDescription>
-            Upload and manage CSV files for zoning, parking, and ADA requirements for {HAWAII_COUNTIES.find(c => c.id === selectedCounty)?.name}
+            Upload and manage CSV files for zoning, parking, and ADA requirements
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1040,7 +682,7 @@ const Dashboard = () => {
                   ref={zoningInputRef}
                   type="file" 
                   accept=".csv"
-                  onChange={(e) => handleFileUpload(e, "zoning")}
+                  onChange={(e) => handleFileUpload(e, 'zoning')}
                 />
                 {datasets.zoning.status === 'loaded' && (
                   <Badge className="bg-green-500">
@@ -1070,7 +712,7 @@ const Dashboard = () => {
                   ref={parkingInputRef}
                   type="file" 
                   accept=".csv"
-                  onChange={(e) => handleFileUpload(e, "parking")}
+                  onChange={(e) => handleFileUpload(e, 'parking')}
                 />
                 {datasets.parking.status === 'loaded' && (
                   <Badge className="bg-green-500">
@@ -1100,7 +742,7 @@ const Dashboard = () => {
                   ref={adaInputRef}
                   type="file" 
                   accept=".csv"
-                  onChange={(e) => handleFileUpload(e, "ada")}
+                  onChange={(e) => handleFileUpload(e, 'ada')}
                 />
                 {datasets.ada.status === 'loaded' && (
                   <Badge className="bg-green-500">
@@ -1130,8 +772,7 @@ const Dashboard = () => {
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Missing Required Files</AlertTitle>
               <AlertDescription>
-                Some required data files are missing for {HAWAII_COUNTIES.find(c => c.id === selectedCounty)?.name}. 
-                The wizard may not function correctly until all files are uploaded.
+                Some required data files are missing. The wizard may not function correctly until all files are uploaded.
               </AlertDescription>
             </Alert>
           )}
@@ -1156,33 +797,33 @@ const Dashboard = () => {
       {/* Tabbed Data Tables */}
       <Card>
         <CardHeader>
-          <CardTitle>Data Tables - {HAWAII_COUNTIES.find(c => c.id === selectedCounty)?.name}</CardTitle>
+          <CardTitle>Data Tables</CardTitle>
           <CardDescription>
             View and edit data for each category
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as DatasetKey)} className="w-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-3 mb-8">
               <TabsTrigger value="zoning">Zoning Standards</TabsTrigger>
               <TabsTrigger value="parking">Parking Requirements</TabsTrigger>
               <TabsTrigger value="ada">ADA Requirements</TabsTrigger>
             </TabsList>
             
-            {(['zoning', 'parking', 'ada'] as Array<DatasetKey>).map((datasetKey) => (
+            {['zoning', 'parking', 'ada'].map(datasetKey => (
               <TabsContent key={datasetKey} value={datasetKey} className="space-y-6">
                 {/* Dataset Info and Controls */}
                 <div className="flex flex-col md:flex-row justify-between mb-6 gap-4">
                   <div className="space-y-2">
-                    <h3 className="text-lg font-medium">{datasets[datasetKey].name}</h3>
-                    {datasets[datasetKey].lastUpdated && (
+                    <h3 className="text-lg font-medium">{datasets[datasetKey as keyof typeof datasets].name}</h3>
+                    {datasets[datasetKey as keyof typeof datasets].lastUpdated && (
                       <p className="text-sm text-gray-500">
-                        Last updated: {new Date(datasets[datasetKey].lastUpdated as string).toLocaleString()}
+                        Last updated: {new Date(datasets[datasetKey as keyof typeof datasets].lastUpdated as string).toLocaleString()}
                       </p>
                     )}
                   </div>
                   
-                  <div className="flex gap-2 flex-wrap">
+                  <div className="flex gap-2">
                     <Button onClick={() => handleAddRow(datasetKey)} size="sm" className="flex items-center gap-1">
                       <Plus className="w-4 h-4" /> Add Row
                     </Button>
@@ -1193,19 +834,10 @@ const Dashboard = () => {
                       onClick={() => handleDownloadCSV(datasetKey)} 
                       variant="outline" 
                       size="sm"
-                      disabled={!datasets[datasetKey].data}
+                      disabled={!datasets[datasetKey as keyof typeof datasets].data}
                       className="flex items-center gap-1"
                     >
                       <Download className="w-4 h-4" /> Download CSV
-                    </Button>
-                    <Button 
-                      onClick={() => handleClearTable(datasetKey)} 
-                      variant="destructive" 
-                      size="sm"
-                      disabled={!datasets[datasetKey].data}
-                      className="flex items-center gap-1"
-                    >
-                      <Trash2 className="w-4 h-4" /> Clear Table
                     </Button>
                   </div>
                 </div>
@@ -1215,14 +847,14 @@ const Dashboard = () => {
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
                   <Input
                     placeholder="Search data..."
-                    value={filters[datasetKey]}
+                    value={filters[datasetKey as keyof typeof filters]}
                     onChange={(e) => setFilters(prev => ({...prev, [datasetKey]: e.target.value}))}
                     className="pl-9"
                   />
                 </div>
                 
                 {/* Data Table */}
-                {datasets[datasetKey].data ? (
+                {datasets[datasetKey as keyof typeof datasets].data ? (
                   <div className="overflow-x-auto border rounded-md">
                     <Table>
                       <TableHeader>
@@ -1237,19 +869,15 @@ const Dashboard = () => {
                           <TableRow key={rowIndex}>
                             {columnConfigs[datasetKey].map((column) => (
                               <TableCell key={column.accessorKey}>
-                                {column.accessorKey === 'actions' ? (
-                                  column.cell ? column.cell({...row, index: rowIndex}) : null
-                                ) : (
-                                  <Input
-                                    value={row[column.accessorKey] || ''}
-                                    onChange={(e) => handleCellEdit(
-                                      datasetKey, 
-                                      rowIndex, 
-                                      column.accessorKey, 
-                                      e.target.value
-                                    )}
-                                  />
-                                )}
+                                <Input
+                                  value={row[column.accessorKey] || ''}
+                                  onChange={(e) => handleCellEdit(
+                                    datasetKey, 
+                                    rowIndex, 
+                                    column.accessorKey, 
+                                    e.target.value
+                                  )}
+                                />
                               </TableCell>
                             ))}
                           </TableRow>
@@ -1269,7 +897,7 @@ const Dashboard = () => {
                   <Textarea
                     id={`${datasetKey}-notes`}
                     placeholder="Add notes about this dataset..."
-                    value={datasets[datasetKey].notes}
+                    value={datasets[datasetKey as keyof typeof datasets].notes}
                     onChange={(e) => handleNotesChange(datasetKey, e.target.value)}
                     className="min-h-[100px]"
                   />
@@ -1279,24 +907,6 @@ const Dashboard = () => {
           </Tabs>
         </CardContent>
       </Card>
-      
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteMessage}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteAction()}>
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 };

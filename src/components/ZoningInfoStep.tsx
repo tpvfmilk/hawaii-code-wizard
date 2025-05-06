@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
-import { requiredDatasets } from "@/data/codeData";
+import { zoningDistricts, requiredDatasets } from "@/data/codeData";
 import { parseCSV, checkRequiredColumns, validateDatasetStructure, calculateADAParking, debugCSVContent } from "@/utils/CSVHelper";
 import { useToast } from "@/hooks/use-toast";
 import { normalizeCSVColumns, logColumnTransformation, supabase } from "@/integrations/supabase/client";
@@ -69,55 +69,9 @@ const ZoningInfoStep = ({
   const [attemptedMatch, setAttemptedMatch] = useState<string>("");
   const [showMatchDetails, setShowMatchDetails] = useState(false);
   const [matchDebugInfo, setMatchDebugInfo] = useState<any>(null);
-  const [allZoningDistricts, setAllZoningDistricts] = useState<{id: string; name: string; jurisdiction: string}[]>([]);
   
-  // Modified to only use districts from database
-  useEffect(() => {
-    if (zoningDataset.length > 0) {
-      // Create a map to track districts by ID to avoid duplicates
-      const districtMap = new Map();
-      
-      // Add districts from the database
-      zoningDataset.forEach(zoning => {
-        if (zoning.county === jurisdiction && zoning.zoning_district) {
-          // Create a normalized ID (lowercase, no spaces)
-          const id = zoning.zoning_district.toLowerCase().replace(/\s+/g, '_');
-          
-          // Only add if we don't already have this district
-          if (!districtMap.has(id)) {
-            districtMap.set(id, {
-              id: id,
-              name: zoning.zoning_district, // Use the district name from the database
-              jurisdiction: zoning.county
-            });
-          }
-        }
-      });
-      
-      // Convert the map values back to an array
-      const districtsList = Array.from(districtMap.values());
-      
-      // Sort districts alphabetically by name
-      districtsList.sort((a, b) => a.name.localeCompare(b.name));
-      
-      // Update our state with the districts
-      setAllZoningDistricts(districtsList);
-      
-      console.log('Districts from database:', districtsList);
-      
-      // If no districts were found for this jurisdiction, show a warning
-      if (districtsList.length === 0) {
-        setValidationMessage({
-          type: 'warning',
-          message: `No zoning districts found for ${jurisdiction}. Please upload zoning data with districts.`
-        });
-      }
-    } else {
-      // No zoning data loaded yet
-      setAllZoningDistricts([]);
-    }
-  }, [jurisdiction, zoningDataset]);
-  
+  const filteredDistricts = zoningDistricts.filter(district => district.jurisdiction === jurisdiction);
+
   // Fetch zoning data from Supabase when component mounts
   useEffect(() => {
     const fetchZoningData = async () => {
@@ -645,7 +599,7 @@ const ZoningInfoStep = ({
             <ZoningDistrictSelector
               zoningDistrict={zoningData.zoningDistrict}
               onChange={(value) => handleFieldChange("zoningDistrict", value)}
-              districts={allZoningDistricts}
+              districts={filteredDistricts}
               onApplyStandards={populateZoningFields}
               isLoading={isLoading}
               loadingZoningData={loadingZoningData}

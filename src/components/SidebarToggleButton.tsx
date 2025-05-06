@@ -4,11 +4,7 @@ import { PanelLeftClose, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSidebar } from '@/components/ui/sidebar';
 
-interface SidebarToggleButtonProps {
-  blockHeader?: boolean;
-}
-
-const SidebarToggleButton = ({ blockHeader = false }: SidebarToggleButtonProps) => {
+const SidebarToggleButton = () => {
   const { state, toggleSidebar } = useSidebar();
   const isExpanded = state === 'expanded';
 
@@ -16,7 +12,7 @@ const SidebarToggleButton = ({ blockHeader = false }: SidebarToggleButtonProps) 
     <Button
       variant="ghost"
       size="icon"
-      className={`absolute left-4 top-4 z-20 md:left-6 md:top-6 bg-background/80 backdrop-blur-sm shadow-sm border ${blockHeader ? 'z-50' : 'z-20'}`}
+      className="absolute left-4 top-4 z-20 md:left-6 md:top-6 bg-background/80 backdrop-blur-sm shadow-sm border"
       onClick={toggleSidebar}
       aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
     >

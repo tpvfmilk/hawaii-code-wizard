@@ -1,3 +1,4 @@
+
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { 
@@ -9,7 +10,7 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { occupancyGroups, constructionTypes } from "@/data/codeData";
+import { occupancyGroups, constructionTypes, zoningDistricts } from "@/data/codeData";
 import { downloadAsCSV } from "@/utils/CSVHelper";
 import { toast } from "@/hooks/use-toast";
 
@@ -39,9 +40,8 @@ const SummaryStep = ({
   };
   
   const getZoningName = (id: string) => {
-    // Instead of using the hardcoded zoningDistricts array, just return the ID
-    // This will display the zoning district ID directly, which is likely its name anyway
-    return id;
+    const district = zoningDistricts.find(d => d.id === id);
+    return district ? district.name : id;
   };
   
   const exportToCSV = () => {
