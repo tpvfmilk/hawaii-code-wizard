@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useProject } from '@/hooks/use-project';
 import { Link } from "react-router-dom";
@@ -72,6 +71,12 @@ const HAWAII_COUNTIES = [
 // Define proper types for our dataset
 type DatasetStatus = "missing" | "loaded" | "uploading";
 
+// Define row data type to avoid recursive type references
+interface RowData {
+  [key: string]: any;
+  index?: number;
+}
+
 interface DatasetInfo {
   name: string;
   type: string;
@@ -92,7 +97,7 @@ interface DatasetsState {
 interface ColumnConfig {
   header: string;
   accessorKey: string;
-  cell?: (info: { [key: string]: any; index: number }) => React.ReactNode;
+  cell?: (info: RowData) => React.ReactNode;
 }
 
 const Dashboard = () => {
@@ -187,11 +192,11 @@ const Dashboard = () => {
       { 
         header: "Actions", 
         accessorKey: "actions",
-        cell: (rowData) => (
+        cell: (rowData: RowData) => (
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={() => handleDeleteRow(activeTab, rowData.index)}
+            onClick={() => handleDeleteRow(activeTab, rowData.index || 0)}
             title="Delete row"
           >
             <Trash2 className="h-4 w-4" />
@@ -206,11 +211,11 @@ const Dashboard = () => {
       { 
         header: "Actions", 
         accessorKey: "actions",
-        cell: (rowData) => (
+        cell: (rowData: RowData) => (
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={() => handleDeleteRow(activeTab, rowData.index)}
+            onClick={() => handleDeleteRow(activeTab, rowData.index || 0)}
             title="Delete row"
           >
             <Trash2 className="h-4 w-4" />
@@ -224,11 +229,11 @@ const Dashboard = () => {
       { 
         header: "Actions", 
         accessorKey: "actions",
-        cell: (rowData) => (
+        cell: (rowData: RowData) => (
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={() => handleDeleteRow(activeTab, rowData.index)}
+            onClick={() => handleDeleteRow(activeTab, rowData.index || 0)}
             title="Delete row"
           >
             <Trash2 className="h-4 w-4" />
