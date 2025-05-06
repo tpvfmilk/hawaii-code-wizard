@@ -3,7 +3,6 @@ import React, { useState, useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import ProjectSidebar from "@/components/ProjectSidebar";
-import SidebarToggleButton from "@/components/SidebarToggleButton";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -63,7 +62,7 @@ const AppLayout = () => {
   }, [projectData, currentProject]);
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={true} open={true}>
       <div className="flex min-h-screen w-full">
         <ProjectSidebar 
           currentProject={currentProject} 
@@ -71,7 +70,6 @@ const AppLayout = () => {
           projectData={projectData}
         />
         <SidebarInset>
-          <SidebarToggleButton />
           <Outlet context={{ 
             currentProject, 
             updateProjectData

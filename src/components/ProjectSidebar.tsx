@@ -268,7 +268,7 @@ const ProjectSidebar = ({ currentProject, setCurrentProject, projectData }: Proj
   }, []);
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="none">
       <SidebarHeader>
         <div className="flex items-center justify-between p-2">
           <h3 className="text-lg font-semibold">Projects</h3>
