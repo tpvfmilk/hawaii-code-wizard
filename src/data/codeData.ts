@@ -70,8 +70,8 @@ export const constructionTypes = [
 export const requiredDatasets = {
   zoning: {
     name: "Zoning Data",
-    requiredColumns: ["District", "Setbacks", "FAR", "Height", "Coverage", "ParkingRatios"],
-    prompt: "Zoning data not available for this district. Please upload CSV with columns: District, Setbacks, FAR, Height, Coverage, Parking Ratios."
+    requiredColumns: ["District", "Setbacks", "FAR", "Height", "Coverage"],
+    prompt: "Zoning data not available for this district. Please upload CSV with columns: District, Setbacks, FAR, Height, Coverage."
   },
   heightLimits: {
     name: "IBC Table 504.3 (Height Limits)",
@@ -106,17 +106,3 @@ export interface CSVUploadConfig {
   description: string;
   requiredColumns: string[];
 }
-
-export const calculateADAParking = (totalStalls: number): number => {
-  if (totalStalls <= 0) return 0;
-  if (totalStalls <= 25) return 1;
-  if (totalStalls <= 50) return 2;
-  if (totalStalls <= 75) return 3;
-  if (totalStalls <= 100) return 4;
-  if (totalStalls <= 150) return 5;
-  if (totalStalls <= 200) return 6;
-  if (totalStalls <= 300) return 7;
-  if (totalStalls <= 400) return 8;
-  if (totalStalls <= 500) return 9;
-  return Math.floor(totalStalls * 0.02);
-};

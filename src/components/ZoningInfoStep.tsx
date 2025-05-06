@@ -1,12 +1,11 @@
+
 import React, { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
 import { zoningDistricts, requiredDatasets } from "@/data/codeData";
-import { parseCSV, checkRequiredColumns, validateDatasetStructure, calculateADAParking, debugCSVContent } from "@/utils/CSVHelper";
+import { parseCSV, checkRequiredColumns, validateDatasetStructure, debugCSVContent } from "@/utils/CSVHelper";
 import { useToast } from "@/hooks/use-toast";
 import { normalizeCSVColumns, logColumnTransformation, supabase } from "@/integrations/supabase/client";
 import { findZoningMatch, findZoningMatchWithDebug } from "@/utils/matchingUtils";
-import { parseParking, formatParking } from "@/utils/matchingUtils";
-import ParkingRequirementField from "./zoning/ParkingRequirementField";
 
 // Import our new components
 import ZoningDistrictSelector from "./zoning/ZoningDistrictSelector";
@@ -27,9 +26,6 @@ interface ZoningInfoStepProps {
     far: string;
     maxHeight: string;
     lotCoverage: string;
-    parkingSpaces: string;  // Changed from parkingRequired
-    parkingUnit: string;    // New field for parking unit
-    adaParking: string;
     isSMA: boolean;
     isFloodZone: boolean;
     isLavaZone: boolean;
@@ -57,7 +53,6 @@ const ZoningInfoStep = ({
   });
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [showPreview, setShowPreview] = useState(false);
-  const [adaDataset, setAdaDataset] = useState<any[]>([]);
   const [zoningDataset, setZoningDataset] = useState<any[]>([]);
   const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
@@ -122,38 +117,8 @@ const ZoningInfoStep = ({
       }
     };
     
-    // Fetch ADA requirements
-    const fetchADAData = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('ada_requirements')
-          .select('*');
-        
-        if (error) {
-          console.error("Error fetching ADA data:", error);
-          return;
-        }
-        
-        if (data && data.length > 0) {
-          console.log("Fetched ADA requirements from database:", data);
-          setAdaDataset(data);
-          onDatasetUploaded("ada", data);
-          
-          // If parking is already specified, calculate ADA requirement
-          if (zoningData.parkingSpaces) {
-            const totalParking = parseInt(zoningData.parkingSpaces);
-            const adaResult = calculateADAParking(data, totalParking);
-            onZoningDataChange("adaParking", adaResult.required.toString());
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch ADA data:", err);
-      }
-    };
-    
     if (jurisdiction) {
       fetchZoningData();
-      fetchADAData();
     }
   }, [jurisdiction]);
 
@@ -220,23 +185,6 @@ const ZoningInfoStep = ({
       if (match.max_lot_coverage) {
         onZoningDataChange('lotCoverage', match.max_lot_coverage.toString());
         newPopulatedFields.push('lotCoverage');
-      }
-      if (match.parking_required) {
-        // Parse the parking requirement into spaces and unit
-        const { spaces, unit } = parseParking(match.parking_required);
-        onZoningDataChange('parkingSpaces', spaces);
-        onZoningDataChange('parkingUnit', unit);
-        newPopulatedFields.push('parkingSpaces');
-        newPopulatedFields.push('parkingUnit');
-        
-        // Also update ADA parking if parkingSpaces is set
-        if (spaces && adaDataset.length > 0) {
-          // Calculate total parking
-          const totalParking = calculateTotalParking();
-          const adaResult = calculateADAParking(adaDataset, totalParking);
-          onZoningDataChange("adaParking", adaResult.required.toString());
-          newPopulatedFields.push('adaParking');
-        }
       }
 
       // Set the populated fields for highlighting
@@ -399,138 +347,6 @@ const ZoningInfoStep = ({
     };
     reader.readAsText(file);
   };
-
-  const handleADAFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Check file type
-    if (file.type !== 'text/csv' && !file.name.toLowerCase().endsWith('.csv')) {
-      toast({
-        title: "Invalid File Type",
-        description: "Please upload a CSV file.",
-        variant: "destructive"
-      });
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = event => {
-      try {
-        if (!event.target?.result) {
-          throw new Error("Failed to read file");
-        }
-        const fileContent = event.target.result as string;
-
-        // Create debug information
-        const debug = debugCSVContent(fileContent);
-        console.log("ADA CSV Upload: Debug info", debug);
-        setDebugInfo(debug); // Store debug info in case of errors
-
-        const result = parseCSV(fileContent);
-        const {
-          data
-        } = result;
-        if (!data || data.length === 0) {
-          throw new Error("No data found in CSV file");
-        }
-        console.log("ADA CSV Upload: Original data first row", data[0]);
-
-        // Normalize CSV column names to match database schema
-        const normalizedData = normalizeCSVColumns(data, "ada");
-
-        // Log transformation for debugging
-        logColumnTransformation(data, normalizedData);
-        console.log("ADA CSV Upload: Normalized data first row", normalizedData[0]);
-
-        // Validate dataset structure with normalized data
-        const validation = validateDatasetStructure(normalizedData, "ada");
-        if (validation.valid) {
-          onDatasetUploaded("ada", normalizedData);
-          setAdaDataset(normalizedData);
-          setValidationMessage({
-            type: 'success',
-            message: `Successfully uploaded ${data.length} ADA parking requirement records.`
-          });
-          setShowPreview(true);
-          setPreviewData(data.slice(0, 3)); // Show a preview of the data
-
-          toast({
-            title: "Dataset Uploaded",
-            description: `Successfully uploaded ${data.length} ADA parking requirement records.`
-          });
-
-          // Recalculate ADA parking if parking spaces is set
-          if (zoningData.parkingSpaces) {
-            const totalParking = calculateTotalParking();
-            const adaResult = calculateADAParking(normalizedData, totalParking);
-            onZoningDataChange("adaParking", adaResult.required.toString());
-          }
-        } else {
-          setValidationMessage({
-            type: 'error',
-            message: validation.message
-          });
-
-          // Show debug info since there was an error
-          setShowDebugInfo(true);
-          toast({
-            title: "Validation Error",
-            description: validation.message,
-            variant: "destructive"
-          });
-          console.error("CSV validation failed:", validation.message);
-        }
-      } catch (error) {
-        console.error("Error parsing ADA CSV:", error);
-        const errorMessage = error instanceof Error ? error.message : 'Error parsing CSV file. Please check the format.';
-        setValidationMessage({
-          type: 'error',
-          message: errorMessage
-        });
-
-        // Show debug info since there was an error
-        setShowDebugInfo(true);
-        toast({
-          title: "Upload Error",
-          description: errorMessage,
-          variant: "destructive"
-        });
-      }
-    };
-    reader.onerror = () => {
-      console.error("FileReader error:", reader.error);
-      setValidationMessage({
-        type: 'error',
-        message: 'Failed to read the file. Please try again.'
-      });
-      toast({
-        title: "File Error",
-        description: 'Failed to read the file. Please try again.',
-        variant: "destructive"
-      });
-    };
-    reader.readAsText(file);
-  };
-
-  const calculateTotalParking = () => {
-    // Calculate total parking based on spaces and units
-    // For now, we'll just use the raw spaces value
-    const parkingSpaces = parseFloat(zoningData.parkingSpaces) || 0;
-    return Math.ceil(parkingSpaces);
-  };
-  
-  const totalParking = calculateTotalParking();
-
-  // Calculate ADA parking whenever total parking changes
-  React.useEffect(() => {
-    if (adaDataset.length > 0) {
-      const adaResult = calculateADAParking(adaDataset, totalParking);
-      onZoningDataChange("adaParking", adaResult.required.toString());
-    } else {
-      const adaRequired = calculateADAParking([], totalParking);
-      onZoningDataChange("adaParking", adaRequired.required.toString());
-    }
-  }, [zoningData.parkingSpaces, adaDataset]);
   
   // Helper function to determine if a field was recently populated
   const isFieldPopulated = (fieldName: string) => {
@@ -668,29 +484,6 @@ const ZoningInfoStep = ({
           />
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <ParkingRequirementField
-            spaces={zoningData.parkingSpaces}
-            unit={zoningData.parkingUnit}
-            onSpacesChange={(value) => handleFieldChange("parkingSpaces", value)}
-            onUnitChange={(value) => handleFieldChange("parkingUnit", value)}
-            isPopulated={isFieldPopulated("parkingSpaces")}
-            tooltip="Specify parking spaces required and the basis (e.g., 2 spaces per dwelling unit)"
-          />
-          
-          <ZoningDataField 
-            id="adaParking"
-            label="ADA Parking Required"
-            type="number"
-            min="0"
-            readOnly={true}
-            value={zoningData.adaParking}
-            onChange={(value) => handleFieldChange("adaParking", value)}
-            isPopulated={isFieldPopulated("adaParking")}
-            tooltip="Automatically calculated based on total parking spaces"
-          />
-        </div>
-        
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
           <ZoningCheckbox 
             id="isSMA"
@@ -727,13 +520,6 @@ const ZoningInfoStep = ({
             title="Upload zoning data"
             description="Upload Zoning_Standards.csv"
             onChange={handleFileUpload}
-          />
-          
-          <FileUpload 
-            id="adaCsvUpload"
-            title="Upload ADA requirements"
-            description="Upload ADA_Stall_Requirements.csv"
-            onChange={handleADAFileUpload}
           />
         </div>
       </div>

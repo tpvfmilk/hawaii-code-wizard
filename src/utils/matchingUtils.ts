@@ -4,40 +4,6 @@
  */
 
 /**
- * Parses a parking requirement string into separate values for spaces and unit
- * Example: "2 / DU" -> { spaces: "2", unit: "DU" }
- */
-export function parseParking(parkingString: string | null | undefined): { spaces: string, unit: string } {
-  if (!parkingString) return { spaces: "", unit: "" };
-  
-  // Try to match patterns like "2 / DU", "1.5/DU", "1 per dwelling unit", etc.
-  const regex = /^([\d.]+)\s*(?:\/|per)\s*(.+)$/i;
-  const match = parkingString.trim().match(regex);
-  
-  if (match) {
-    return {
-      spaces: match[1].trim(),
-      unit: match[2].trim()
-    };
-  }
-  
-  // If no clear pattern, just return the raw value as spaces and empty unit
-  return {
-    spaces: parkingString,
-    unit: ""
-  };
-}
-
-/**
- * Formats parking requirements back into a string
- */
-export function formatParking(spaces: string, unit: string): string {
-  if (!spaces) return "";
-  if (!unit) return spaces;
-  return `${spaces} / ${unit}`;
-}
-
-/**
  * Performs a detailed comparison between a frontend zoning district ID and backend records
  * to find why matches might be failing
  */
@@ -101,8 +67,7 @@ export function findZoningMatchWithDebug(
     debugInfo.matchAttempts.push({
       record: {
         county: item.county,
-        district: item.zoning_district,
-        parking: item.parking_required
+        district: item.zoning_district
       },
       comparison: {
         countyMatch,

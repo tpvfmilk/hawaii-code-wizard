@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { useProject } from '@/hooks/use-project';
 import { Link } from "react-router-dom";
@@ -52,11 +53,17 @@ interface DatasetInfo {
   data: any[] | null;
 }
 
+// Define a more specific type for column configurations
 interface ColumnConfig {
   header: string;
   accessorKey: string;
-  cell?: (info: any) => React.ReactNode;
 }
+
+// Define a type for datasets to avoid excessive recursion
+type DatasetKey = 'zoning' | 'parking' | 'ada';
+type DatasetMap = Record<DatasetKey, DatasetInfo>;
+type FilterMap = Record<DatasetKey, string>;
+type ColumnConfigMap = Record<DatasetKey, ColumnConfig[]>;
 
 const Dashboard = () => {
   const { toast } = useToast();
@@ -70,7 +77,7 @@ const Dashboard = () => {
   }, [currentProject]);
   
   // Datasets state
-  const [datasets, setDatasets] = useState<Record<string, DatasetInfo>>({
+  const [datasets, setDatasets] = useState<DatasetMap>({
     zoning: {
       name: "Zoning Standards",
       type: "zoning_standards",
@@ -98,7 +105,7 @@ const Dashboard = () => {
   });
   
   // Active tab state
-  const [activeTab, setActiveTab] = useState("zoning");
+  const [activeTab, setActiveTab] = useState<DatasetKey>("zoning");
   
   // Input refs for file uploads
   const zoningInputRef = useRef<HTMLInputElement>(null);
@@ -106,7 +113,7 @@ const Dashboard = () => {
   const adaInputRef = useRef<HTMLInputElement>(null);
   
   // Search filters
-  const [filters, setFilters] = useState<Record<string, string>>({
+  const [filters, setFilters] = useState<FilterMap>({
     zoning: "",
     parking: "",
     ada: ""
@@ -122,7 +129,7 @@ const Dashboard = () => {
   }, []);
   
   // Column configurations for each dataset
-  const columnConfigs: Record<string, ColumnConfig[]> = {
+  const columnConfigs: ColumnConfigMap = {
     zoning: [
       { header: "County", accessorKey: "county" },
       { header: "Zoning District", accessorKey: "zoning_district" },
@@ -131,9 +138,8 @@ const Dashboard = () => {
       { header: "Rear Setback", accessorKey: "rear_setback" },
       { header: "Max FAR", accessorKey: "max_far" },
       { header: "Max Height", accessorKey: "max_height" },
-      { header: "Max Lot Coverage", accessorKey: "max_lot_coverage" },
-      { header: "Parking Required", accessorKey: "parking_required" },
-      { header: "ADA Stalls Required", accessorKey: "ada_stalls_required" }
+      { header: "Max Lot Coverage", accessorKey: "max_lot_coverage" }
+      // Removed parking and ADA columns
     ],
     parking: [
       { header: "County", accessorKey: "county" },
@@ -182,9 +188,9 @@ const Dashboard = () => {
               ? 'parking' 
               : 'ada';
               
-          if (updatedDatasets[datasetKey]) {
-            updatedDatasets[datasetKey] = {
-              ...updatedDatasets[datasetKey],
+          if (updatedDatasets[datasetKey as DatasetKey]) {
+            updatedDatasets[datasetKey as DatasetKey] = {
+              ...updatedDatasets[datasetKey as DatasetKey],
               status: 'loaded',
               lastUpdated: record.last_updated,
               notes: record.notes || ''
@@ -193,8 +199,8 @@ const Dashboard = () => {
         });
         
         // Fetch actual data for each dataset
-        for (const key of Object.keys(updatedDatasets)) {
-          const tableMap: Record<string, TableName> = {
+        for (const key of Object.keys(updatedDatasets) as DatasetKey[]) {
+          const tableMap: Record<DatasetKey, TableName> = {
             zoning: 'zoning_standards',
             parking: 'parking_requirements',
             ada: 'ada_requirements'
@@ -227,7 +233,7 @@ const Dashboard = () => {
   };
   
   // Function to handle file upload
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, datasetKey: string) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, datasetKey: DatasetKey) => {
     const file = event.target.files?.[0];
     if (!file) return;
     
@@ -259,7 +265,7 @@ const Dashboard = () => {
       // Normalize CSV columns to match database schema
       const normalizedData = normalizeCSVColumns(
         parsedCSV.data, 
-        datasetKey as 'zoning' | 'parking' | 'ada'
+        datasetKey
       );
       
       // Log transformation for debugging
@@ -319,8 +325,8 @@ const Dashboard = () => {
   };
   
   // Validate required columns for each dataset
-  const validateColumns = (headers: Record<string, any>, datasetKey: string) => {
-    const requiredColumns: Record<string, string[]> = {
+  const validateColumns = (headers: Record<string, any>, datasetKey: DatasetKey) => {
+    const requiredColumns: Record<DatasetKey, string[]> = {
       zoning: ['county', 'zoning_district', 'front_setback', 'side_setback', 'rear_setback'],
       parking: ['county', 'use_type', 'parking_requirement'],
       ada: ['total_parking_spaces_provided', 'minimum_required_ada_stalls']
@@ -336,36 +342,17 @@ const Dashboard = () => {
   };
   
   // Save dataset to Supabase
-  const saveDataset = async (datasetKey: string, data: any[]) => {
-    const tableMap: Record<string, TableName> = {
+  const saveDataset = async (datasetKey: DatasetKey, data: any[]) => {
+    const tableMap: Record<DatasetKey, TableName> = {
       zoning: 'zoning_standards',
       parking: 'parking_requirements',
       ada: 'ada_requirements'
     };
     
     const tableName = tableMap[datasetKey];
-    if (!tableName) {
-      throw new Error(`Invalid dataset key: ${datasetKey}`);
-    }
     
-    // Process parking data if this is zoning data
+    // Process data (we removed parking field processing since those fields are gone)
     let processedData = [...data];
-    if (datasetKey === 'zoning') {
-      // Format any split parking fields back to combined format
-      processedData = data.map(item => {
-        const newItem = {...item};
-        
-        // If we have separate parking spaces and unit fields that came from editing
-        if (newItem.parking_spaces && newItem.parking_unit) {
-          newItem.parking_required = `${newItem.parking_spaces} / ${newItem.parking_unit}`;
-          // Clean up the temporary fields
-          delete newItem.parking_spaces;
-          delete newItem.parking_unit;
-        }
-        
-        return newItem;
-      });
-    }
     
     // First, delete existing records
     const { error: deleteError } = await getTableRef(tableName).delete().neq('id', '00000000-0000-0000-0000-000000000000');
@@ -424,7 +411,7 @@ const Dashboard = () => {
   };
   
   // Handle notes change
-  const handleNotesChange = async (datasetKey: string, notes: string) => {
+  const handleNotesChange = async (datasetKey: DatasetKey, notes: string) => {
     setDatasets(prev => ({
       ...prev,
       [datasetKey]: {
@@ -473,7 +460,7 @@ const Dashboard = () => {
   };
   
   // Handle adding a new row
-  const handleAddRow = (datasetKey: string) => {
+  const handleAddRow = (datasetKey: DatasetKey) => {
     const emptyRow: any = {};
     
     // Create an empty row with all required columns
@@ -495,7 +482,7 @@ const Dashboard = () => {
   };
   
   // Handle cell edit
-  const handleCellEdit = (datasetKey: string, rowIndex: number, columnKey: string, value: string) => {
+  const handleCellEdit = (datasetKey: DatasetKey, rowIndex: number, columnKey: string, value: string) => {
     setDatasets(prev => {
       if (!prev[datasetKey].data) return prev;
       
@@ -516,7 +503,7 @@ const Dashboard = () => {
   };
   
   // Save edited data
-  const handleSaveData = async (datasetKey: string) => {
+  const handleSaveData = async (datasetKey: DatasetKey) => {
     if (!datasets[datasetKey].data) return;
     
     try {
@@ -537,7 +524,7 @@ const Dashboard = () => {
   };
   
   // Handle download CSV
-  const handleDownloadCSV = (datasetKey: string) => {
+  const handleDownloadCSV = (datasetKey: DatasetKey) => {
     if (!datasets[datasetKey].data) return;
     
     // Convert data to CSV
@@ -569,7 +556,7 @@ const Dashboard = () => {
   };
   
   // Filter data based on search term
-  const getFilteredData = (datasetKey: string) => {
+  const getFilteredData = (datasetKey: DatasetKey) => {
     if (!datasets[datasetKey].data) return [];
     
     const searchTerm = filters[datasetKey].toLowerCase();
@@ -647,8 +634,6 @@ const Dashboard = () => {
                       <li>max_far</li>
                       <li>max_height</li>
                       <li>max_lot_coverage</li>
-                      <li>parking_required</li>
-                      <li>ada_stalls_required</li>
                     </ul>
                   </div>
                   <div>
@@ -803,38 +788,38 @@ const Dashboard = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as DatasetKey)} className="w-full">
             <TabsList className="grid w-full grid-cols-3 mb-8">
               <TabsTrigger value="zoning">Zoning Standards</TabsTrigger>
               <TabsTrigger value="parking">Parking Requirements</TabsTrigger>
               <TabsTrigger value="ada">ADA Requirements</TabsTrigger>
             </TabsList>
             
-            {['zoning', 'parking', 'ada'].map(datasetKey => (
+            {['zoning', 'parking', 'ada'].map((datasetKey) => (
               <TabsContent key={datasetKey} value={datasetKey} className="space-y-6">
                 {/* Dataset Info and Controls */}
                 <div className="flex flex-col md:flex-row justify-between mb-6 gap-4">
                   <div className="space-y-2">
-                    <h3 className="text-lg font-medium">{datasets[datasetKey as keyof typeof datasets].name}</h3>
-                    {datasets[datasetKey as keyof typeof datasets].lastUpdated && (
+                    <h3 className="text-lg font-medium">{datasets[datasetKey as DatasetKey].name}</h3>
+                    {datasets[datasetKey as DatasetKey].lastUpdated && (
                       <p className="text-sm text-gray-500">
-                        Last updated: {new Date(datasets[datasetKey as keyof typeof datasets].lastUpdated as string).toLocaleString()}
+                        Last updated: {new Date(datasets[datasetKey as DatasetKey].lastUpdated as string).toLocaleString()}
                       </p>
                     )}
                   </div>
                   
                   <div className="flex gap-2">
-                    <Button onClick={() => handleAddRow(datasetKey)} size="sm" className="flex items-center gap-1">
+                    <Button onClick={() => handleAddRow(datasetKey as DatasetKey)} size="sm" className="flex items-center gap-1">
                       <Plus className="w-4 h-4" /> Add Row
                     </Button>
-                    <Button onClick={() => handleSaveData(datasetKey)} size="sm" className="flex items-center gap-1">
+                    <Button onClick={() => handleSaveData(datasetKey as DatasetKey)} size="sm" className="flex items-center gap-1">
                       <Upload className="w-4 h-4" /> Save Changes
                     </Button>
                     <Button 
-                      onClick={() => handleDownloadCSV(datasetKey)} 
+                      onClick={() => handleDownloadCSV(datasetKey as DatasetKey)} 
                       variant="outline" 
                       size="sm"
-                      disabled={!datasets[datasetKey as keyof typeof datasets].data}
+                      disabled={!datasets[datasetKey as DatasetKey].data}
                       className="flex items-center gap-1"
                     >
                       <Download className="w-4 h-4" /> Download CSV
@@ -847,32 +832,32 @@ const Dashboard = () => {
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
                   <Input
                     placeholder="Search data..."
-                    value={filters[datasetKey as keyof typeof filters]}
+                    value={filters[datasetKey as DatasetKey]}
                     onChange={(e) => setFilters(prev => ({...prev, [datasetKey]: e.target.value}))}
                     className="pl-9"
                   />
                 </div>
                 
                 {/* Data Table */}
-                {datasets[datasetKey as keyof typeof datasets].data ? (
+                {datasets[datasetKey as DatasetKey].data ? (
                   <div className="overflow-x-auto border rounded-md">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          {columnConfigs[datasetKey].map((column) => (
+                          {columnConfigs[datasetKey as DatasetKey].map((column) => (
                             <TableHead key={column.accessorKey}>{column.header}</TableHead>
                           ))}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {getFilteredData(datasetKey).map((row, rowIndex) => (
-                          <TableRow key={rowIndex}>
-                            {columnConfigs[datasetKey].map((column) => (
+                        {getFilteredData(datasetKey as DatasetKey).map((row, rowIndex) => (
+                          <TableRow key={row.id || rowIndex}>
+                            {columnConfigs[datasetKey as DatasetKey].map((column) => (
                               <TableCell key={column.accessorKey}>
                                 <Input
                                   value={row[column.accessorKey] || ''}
                                   onChange={(e) => handleCellEdit(
-                                    datasetKey, 
+                                    datasetKey as DatasetKey, 
                                     rowIndex, 
                                     column.accessorKey, 
                                     e.target.value
@@ -897,8 +882,8 @@ const Dashboard = () => {
                   <Textarea
                     id={`${datasetKey}-notes`}
                     placeholder="Add notes about this dataset..."
-                    value={datasets[datasetKey as keyof typeof datasets].notes}
-                    onChange={(e) => handleNotesChange(datasetKey, e.target.value)}
+                    value={datasets[datasetKey as DatasetKey].notes}
+                    onChange={(e) => handleNotesChange(datasetKey as DatasetKey, e.target.value)}
                     className="min-h-[100px]"
                   />
                 </div>
