@@ -81,17 +81,18 @@ interface DatasetInfo {
   data: any[] | null;
 }
 
-// Create strongly typed datasets record to avoid deep instantiation
+// Create strongly typed datasets record
 interface DatasetsState {
   zoning: DatasetInfo;
   parking: DatasetInfo;
   ada: DatasetInfo;
 }
 
+// Define column configuration type explicitly, breaking the recursive dependency
 interface ColumnConfig {
   header: string;
   accessorKey: string;
-  cell?: (info: any) => React.ReactNode;
+  cell?: (info: { [key: string]: any; index: number }) => React.ReactNode;
 }
 
 const Dashboard = () => {
@@ -1290,4 +1291,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-
