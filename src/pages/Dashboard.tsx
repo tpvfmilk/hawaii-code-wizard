@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useProject } from '@/hooks/use-project';
 import { Link } from "react-router-dom";
@@ -66,13 +65,23 @@ const HAWAII_COUNTIES = [
   { id: "kauai", name: "County of Kauai" }
 ];
 
+// Define proper types for our dataset
+type DatasetStatus = "missing" | "loaded" | "uploading";
+
 interface DatasetInfo {
   name: string;
   type: string;
-  status: "missing" | "loaded" | "uploading";
+  status: DatasetStatus;
   lastUpdated: string | null;
   notes: string;
   data: any[] | null;
+}
+
+// Create strongly typed datasets record to avoid deep instantiation
+type DatasetsState = {
+  zoning: DatasetInfo;
+  parking: DatasetInfo;
+  ada: DatasetInfo;
 }
 
 interface ColumnConfig {
@@ -92,8 +101,8 @@ const Dashboard = () => {
       'Data Dashboard';
   }, [currentProject]);
   
-  // Datasets state
-  const [datasets, setDatasets] = useState<Record<string, DatasetInfo>>({
+  // Datasets state with explicit type
+  const [datasets, setDatasets] = useState<DatasetsState>({
     zoning: {
       name: "Zoning Standards",
       type: "zoning_standards",
@@ -136,7 +145,7 @@ const Dashboard = () => {
   const parkingInputRef = useRef<HTMLInputElement>(null);
   const adaInputRef = useRef<HTMLInputElement>(null);
   
-  // Search filters
+  // Search filters with explicit type
   const [filters, setFilters] = useState<Record<string, string>>({
     zoning: "",
     parking: "",
@@ -321,7 +330,7 @@ const Dashboard = () => {
   };
   
   // Function to handle file upload
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, datasetKey: string) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, datasetKey: keyof DatasetsState) => {
     if (!currentProject) {
       toast({
         title: "No active project",
@@ -446,7 +455,7 @@ const Dashboard = () => {
   };
   
   // Save dataset to Supabase
-  const saveDataset = async (datasetKey: string, data: any[]) => {
+  const saveDataset = async (datasetKey: keyof DatasetsState, data: any[]) => {
     if (!currentProject) {
       throw new Error("No active project");
     }
@@ -549,7 +558,7 @@ const Dashboard = () => {
   };
   
   // Handle notes change
-  const handleNotesChange = async (datasetKey: string, notes: string) => {
+  const handleNotesChange = async (datasetKey: keyof DatasetsState, notes: string) => {
     if (!currentProject) return;
     
     setDatasets(prev => ({
@@ -604,7 +613,7 @@ const Dashboard = () => {
   };
   
   // Handle adding a new row
-  const handleAddRow = (datasetKey: string) => {
+  const handleAddRow = (datasetKey: keyof DatasetsState) => {
     if (!currentProject) {
       toast({
         title: "No active project",
@@ -640,7 +649,7 @@ const Dashboard = () => {
   };
   
   // Handle cell edit
-  const handleCellEdit = (datasetKey: string, rowIndex: number, columnKey: string, value: string) => {
+  const handleCellEdit = (datasetKey: keyof DatasetsState, rowIndex: number, columnKey: string, value: string) => {
     setDatasets(prev => {
       if (!prev[datasetKey].data) return prev;
       
@@ -661,7 +670,7 @@ const Dashboard = () => {
   };
   
   // Handle row delete
-  const handleDeleteRow = (datasetKey: string, rowIndex: number) => {
+  const handleDeleteRow = (datasetKey: keyof DatasetsState, rowIndex: number) => {
     if (!datasets[datasetKey].data || !currentProject) return;
     
     const row = datasets[datasetKey].data![rowIndex];
@@ -737,7 +746,7 @@ const Dashboard = () => {
   };
   
   // Handle table clear
-  const handleClearTable = (datasetKey: string) => {
+  const handleClearTable = (datasetKey: keyof DatasetsState) => {
     if (!datasets[datasetKey].data || !currentProject) return;
     
     // Set up the delete confirmation
@@ -806,7 +815,7 @@ const Dashboard = () => {
   };
   
   // Save edited data
-  const handleSaveData = async (datasetKey: string) => {
+  const handleSaveData = async (datasetKey: keyof DatasetsState) => {
     if (!datasets[datasetKey].data || !currentProject) return;
     
     setIsLoading(true);
@@ -831,7 +840,7 @@ const Dashboard = () => {
   };
   
   // Handle download CSV
-  const handleDownloadCSV = (datasetKey: string) => {
+  const handleDownloadCSV = (datasetKey: keyof DatasetsState) => {
     if (!datasets[datasetKey].data) return;
     
     // Convert data to CSV
@@ -871,7 +880,7 @@ const Dashboard = () => {
   };
   
   // Filter data based on search term
-  const getFilteredData = (datasetKey: string) => {
+  const getFilteredData = (datasetKey: keyof DatasetsState) => {
     if (!datasets[datasetKey].data) return [];
     
     const searchTerm = filters[datasetKey].toLowerCase();
