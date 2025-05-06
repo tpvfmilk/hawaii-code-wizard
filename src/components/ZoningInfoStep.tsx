@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
 import { zoningDistricts, requiredDatasets } from "@/data/codeData";
@@ -69,9 +70,52 @@ const ZoningInfoStep = ({
   const [attemptedMatch, setAttemptedMatch] = useState<string>("");
   const [showMatchDetails, setShowMatchDetails] = useState(false);
   const [matchDebugInfo, setMatchDebugInfo] = useState<any>(null);
+  const [allZoningDistricts, setAllZoningDistricts] = useState<{id: string; name: string; jurisdiction: string}[]>([]);
   
-  const filteredDistricts = zoningDistricts.filter(district => district.jurisdiction === jurisdiction);
-
+  // Combine hardcoded districts with districts from database
+  useEffect(() => {
+    // Start with hardcoded districts filtered by jurisdiction
+    const hardcodedDistricts = zoningDistricts.filter(district => district.jurisdiction === jurisdiction);
+    
+    // Create a map to track districts by ID to avoid duplicates
+    const districtMap = new Map();
+    
+    // Add hardcoded districts to the map
+    hardcodedDistricts.forEach(district => {
+      districtMap.set(district.id, district);
+    });
+    
+    // If we have zoning data from the database, add those districts too
+    if (zoningDataset.length > 0) {
+      zoningDataset.forEach(zoning => {
+        if (zoning.county === jurisdiction && zoning.zoning_district) {
+          // Create a normalized ID (lowercase, no spaces)
+          const id = zoning.zoning_district.toLowerCase().replace(/\s+/g, '_');
+          
+          // Only add if we don't already have this district
+          if (!districtMap.has(id)) {
+            districtMap.set(id, {
+              id: id,
+              name: zoning.zoning_district, // Use the district name from the database
+              jurisdiction: zoning.county
+            });
+          }
+        }
+      });
+    }
+    
+    // Convert the map values back to an array
+    const combinedDistricts = Array.from(districtMap.values());
+    
+    // Sort districts alphabetically by name
+    combinedDistricts.sort((a, b) => a.name.localeCompare(b.name));
+    
+    // Update our state with the combined districts
+    setAllZoningDistricts(combinedDistricts);
+    
+    console.log('Combined districts:', combinedDistricts);
+  }, [jurisdiction, zoningDataset]);
+  
   // Fetch zoning data from Supabase when component mounts
   useEffect(() => {
     const fetchZoningData = async () => {
@@ -599,7 +643,7 @@ const ZoningInfoStep = ({
             <ZoningDistrictSelector
               zoningDistrict={zoningData.zoningDistrict}
               onChange={(value) => handleFieldChange("zoningDistrict", value)}
-              districts={filteredDistricts}
+              districts={allZoningDistricts}
               onApplyStandards={populateZoningFields}
               isLoading={isLoading}
               loadingZoningData={loadingZoningData}

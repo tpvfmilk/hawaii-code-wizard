@@ -1,137 +1,152 @@
 
-/**
- * Utility functions for matching zoning records
- */
+// Helper functions for matching zoning, occupancy, construction types
+import { calculateADAParking } from "./CSVHelper";
 
 /**
- * Parses a parking requirement string into separate values for spaces and unit
- * Example: "2 / DU" -> { spaces: "2", unit: "DU" }
+ * Find a matching zoning record from the dataset
+ * @param dataset The zoning dataset to search
+ * @param jurisdiction The jurisdiction (e.g., "honolulu")
+ * @param districtId The district ID to match
+ * @returns The matched zoning record or null if no match is found
  */
-export function parseParking(parkingString: string | null | undefined): { spaces: string, unit: string } {
+export const findZoningMatch = (dataset: any[], jurisdiction: string, districtId: string) => {
+  if (!dataset || !districtId || !jurisdiction) return null;
+  
+  console.log(`Looking for zoning match: jurisdiction=${jurisdiction}, districtId=${districtId}`);
+  
+  // Create a normalized version of the district ID (lowercase, replace spaces with underscores)
+  const normalizedDistrictId = districtId.toLowerCase().replace(/\s+/g, '_');
+  
+  // First, try an exact match on zoning_district (case insensitive)
+  const exactMatch = dataset.find(item => 
+    item.county === jurisdiction && 
+    (item.zoning_district === districtId || 
+     item.zoning_district.toLowerCase() === districtId.toLowerCase() ||
+     item.zoning_district.toLowerCase().replace(/\s+/g, '_') === normalizedDistrictId)
+  );
+  
+  if (exactMatch) {
+    console.log("Found exact zoning match:", exactMatch);
+    return exactMatch;
+  }
+  
+  // If no exact match, try partial match (contains)
+  const partialMatch = dataset.find(item => 
+    item.county === jurisdiction && 
+    (item.zoning_district.toLowerCase().includes(districtId.toLowerCase()) || 
+     districtId.toLowerCase().includes(item.zoning_district.toLowerCase()))
+  );
+  
+  if (partialMatch) {
+    console.log("Found partial zoning match:", partialMatch);
+    return partialMatch;
+  }
+  
+  // Try matching the beginning of the name
+  const beginningMatch = dataset.find(item => 
+    item.county === jurisdiction && 
+    item.zoning_district.toLowerCase().startsWith(districtId.toLowerCase())
+  );
+  
+  if (beginningMatch) {
+    console.log("Found beginning zoning match:", beginningMatch);
+    return beginningMatch;
+  }
+
+  // Try matching just the first word or code
+  const firstWordMatch = dataset.find(item => {
+    if (item.county !== jurisdiction) return false;
+    
+    const itemFirstWord = item.zoning_district.split(' ')[0].toLowerCase();
+    const districtFirstWord = districtId.split(' ')[0].toLowerCase();
+    
+    return itemFirstWord === districtFirstWord;
+  });
+  
+  if (firstWordMatch) {
+    console.log("Found first word zoning match:", firstWordMatch);
+    return firstWordMatch;
+  }
+  
+  // If all else fails, return null
+  console.log("No zoning match found");
+  return null;
+};
+
+/**
+ * Enhanced version of findZoningMatch that returns debug information
+ */
+export const findZoningMatchWithDebug = (dataset: any[], jurisdiction: string, districtId: string) => {
+  const debugInfo = {
+    searchParameters: {
+      jurisdiction,
+      districtId
+    },
+    jurisdictionCheck: {
+      datasetValues: Array.from(new Set(dataset.map(item => item.county)))
+    },
+    districtCheck: {
+      allValues: dataset.filter(item => item.county === jurisdiction).map(item => item.zoning_district),
+      exactMatches: dataset.filter(item => 
+        item.county === jurisdiction && 
+        (item.zoning_district === districtId || 
+         item.zoning_district.toLowerCase() === districtId.toLowerCase())
+      ),
+      partialMatches: dataset.filter(item => 
+        item.county === jurisdiction && 
+        (item.zoning_district.toLowerCase().includes(districtId.toLowerCase()) || 
+         districtId.toLowerCase().includes(item.zoning_district.toLowerCase()))
+      )
+    }
+  };
+  
+  const match = findZoningMatch(dataset, jurisdiction, districtId);
+  
+  return {
+    match,
+    debugInfo
+  };
+};
+
+/**
+ * Parse parking requirement string into components
+ * @param parkingString The parking requirement string (e.g., "2 per unit")
+ * @returns Object with spaces and unit
+ */
+export const parseParking = (parkingString: string): { spaces: string, unit: string } => {
   if (!parkingString) return { spaces: "", unit: "" };
   
-  // Try to match patterns like "2 / DU", "1.5/DU", "1 per dwelling unit", etc.
-  const regex = /^([\d.]+)\s*(?:\/|per)\s*(.+)$/i;
-  const match = parkingString.trim().match(regex);
+  // Handle common formats:
+  // "2 per unit" -> spaces: "2", unit: "per unit"
+  // "1.5 spaces per dwelling" -> spaces: "1.5", unit: "spaces per dwelling"
+  // "1 space / 300 SF" -> spaces: "1", unit: "space / 300 SF"
   
-  if (match) {
+  const match = parkingString.match(/^([\d.]+)\s*(.*)/);
+  
+  if (match && match.length >= 3) {
     return {
-      spaces: match[1].trim(),
+      spaces: match[1],
       unit: match[2].trim()
     };
   }
   
-  // If no clear pattern, just return the raw value as spaces and empty unit
+  // If we can't parse it, just return the whole string as spaces
   return {
     spaces: parkingString,
     unit: ""
   };
-}
+};
 
 /**
- * Formats parking requirements back into a string
+ * Format spaces and unit into a parking requirement string
+ * @param spaces Number of spaces
+ * @param unit Unit string (e.g., "per unit", "per 1000 SF")
+ * @returns Formatted parking requirement string
  */
-export function formatParking(spaces: string, unit: string): string {
+export const formatParking = (spaces: string, unit: string): string => {
   if (!spaces) return "";
+  
   if (!unit) return spaces;
-  return `${spaces} / ${unit}`;
-}
-
-/**
- * Performs a detailed comparison between a frontend zoning district ID and backend records
- * to find why matches might be failing
- */
-export function findZoningMatchWithDebug(
-  dataset: any[], 
-  jurisdiction: string,
-  zoningDistrictId: string
-): { match: any | null; debugInfo: any } {
-  // Create debug info object
-  const debugInfo = {
-    attemptedMatch: zoningDistrictId,
-    jurisdictionCheck: {
-      frontendValue: jurisdiction?.toLowerCase(),
-      datasetValues: dataset.map(item => item.county?.toLowerCase()).filter((v, i, a) => a.indexOf(v) === i)
-    },
-    districtCheck: {
-      frontendValue: zoningDistrictId?.toLowerCase(),
-      exactMatches: [] as string[],
-      partialMatches: [] as string[],
-      allValues: [] as string[]
-    },
-    matchAttempts: [] as any[]
-  };
-
-  // No dataset or empty search - early return
-  if (!dataset || dataset.length === 0 || !zoningDistrictId) {
-    return { match: null, debugInfo };
-  }
-
-  // Collect all zoning district values from dataset for debugging
-  dataset.forEach(item => {
-    const district = item.zoning_district;
-    if (district) {
-      debugInfo.districtCheck.allValues.push(district);
-      
-      // Check for exact match (case insensitive)
-      if (district.toLowerCase() === zoningDistrictId.toLowerCase()) {
-        debugInfo.districtCheck.exactMatches.push(district);
-      }
-      // Check for partial match (district contains the ID or ID contains the district)
-      else if (
-        district.toLowerCase().includes(zoningDistrictId.toLowerCase()) ||
-        zoningDistrictId.toLowerCase().includes(district.toLowerCase())
-      ) {
-        debugInfo.districtCheck.partialMatches.push(district);
-      }
-    }
-  });
-
-  // Try to find a match using both jurisdiction and district
-  for (const item of dataset) {
-    const itemCounty = item.county?.toLowerCase();
-    const itemDistrict = item.zoning_district?.toLowerCase();
-    const searchJurisdiction = jurisdiction?.toLowerCase();
-    const searchDistrict = zoningDistrictId?.toLowerCase();
-
-    const countyMatch = itemCounty === searchJurisdiction;
-    const districtMatch = itemDistrict === searchDistrict;
-    
-    // Log each comparison attempt
-    debugInfo.matchAttempts.push({
-      record: {
-        county: item.county,
-        district: item.zoning_district,
-        parking: item.parking_required
-      },
-      comparison: {
-        countyMatch,
-        districtMatch,
-        countyComparison: `'${itemCounty}' === '${searchJurisdiction}'`,
-        districtComparison: `'${itemDistrict}' === '${searchDistrict}'`
-      }
-    });
-
-    // Return on exact match
-    if (countyMatch && districtMatch) {
-      return { match: item, debugInfo };
-    }
-  }
-
-  // No match found
-  return { match: null, debugInfo };
-}
-
-/**
- * A direct matcher without extra debug info, for production use
- */
-export function findZoningMatch(dataset: any[], jurisdiction: string, zoningDistrictId: string): any | null {
-  if (!dataset || dataset.length === 0 || !zoningDistrictId) {
-    return null;
-  }
-
-  return dataset.find(item => 
-    item.county?.toLowerCase() === jurisdiction?.toLowerCase() && 
-    item.zoning_district?.toLowerCase() === zoningDistrictId?.toLowerCase()
-  );
-}
+  
+  return `${spaces} ${unit}`;
+};
