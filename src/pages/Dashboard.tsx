@@ -17,6 +17,13 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   Table, 
   TableBody, 
@@ -35,11 +42,13 @@ import {
   AlertCircle, 
   CheckCircle2, 
   X,
-  Info
+  Info,
+  Filter
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { parseCSV, debugCSVContent } from "@/utils/CSVHelper";
 import { supabase, normalizeCSVColumns, logColumnTransformation } from "@/integrations/supabase/client";
+import { counties } from "@/data/codeData";
 
 // Define literal type for valid table names in our database
 type TableName = 'zoning_standards' | 'parking_requirements' | 'ada_requirements' | 'csv_datasets';
@@ -107,6 +116,9 @@ const Dashboard = () => {
   // Active tab state
   const [activeTab, setActiveTab] = useState<DatasetKey>("zoning");
   
+  // County filter state
+  const [selectedCounty, setSelectedCounty] = useState<string>("");
+  
   // Input refs for file uploads
   const zoningInputRef = useRef<HTMLInputElement>(null);
   const parkingInputRef = useRef<HTMLInputElement>(null);
@@ -126,7 +138,7 @@ const Dashboard = () => {
   // Fetch datasets on component mount
   useEffect(() => {
     fetchDatasets();
-  }, []);
+  }, [selectedCounty]);
   
   // Column configurations for each dataset
   const columnConfigs: ColumnConfigMap = {
@@ -139,7 +151,6 @@ const Dashboard = () => {
       { header: "Max FAR", accessorKey: "max_far" },
       { header: "Max Height", accessorKey: "max_height" },
       { header: "Max Lot Coverage", accessorKey: "max_lot_coverage" }
-      // Removed parking and ADA columns
     ],
     parking: [
       { header: "County", accessorKey: "county" },
@@ -208,13 +219,22 @@ const Dashboard = () => {
           
           const tableName = tableMap[key];
           if (tableName) {
-            const { data } = await supabase
-              .from(tableName)
-              .select('*');
+            let query = supabase.from(tableName).select('*');
+            
+            // Apply county filter if selected
+            if (selectedCounty && (key === 'zoning' || key === 'parking')) {
+              query = query.eq('county', selectedCounty);
+            }
+            
+            const { data } = await query;
               
             if (data && data.length > 0) {
               updatedDatasets[key].data = data;
               updatedDatasets[key].status = 'loaded';
+            } else {
+              // If no data found with filter, set to null
+              updatedDatasets[key].data = null;
+              updatedDatasets[key].status = 'missing';
             }
           }
         }
@@ -273,6 +293,15 @@ const Dashboard = () => {
       
       // Validate required columns for each dataset type
       validateColumns(normalizedData[0], datasetKey);
+      
+      // Apply county if selected and dataset supports it
+      if (selectedCounty && (datasetKey === 'zoning' || datasetKey === 'parking')) {
+        normalizedData.forEach(item => {
+          if (!item.county) {
+            item.county = selectedCounty;
+          }
+        });
+      }
       
       // Save to Supabase
       await saveDataset(datasetKey, normalizedData);
@@ -354,8 +383,17 @@ const Dashboard = () => {
     // Process data (we removed parking field processing since those fields are gone)
     let processedData = [...data];
     
-    // First, delete existing records
-    const { error: deleteError } = await getTableRef(tableName).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    // First, delete existing records based on county filter
+    let deleteQuery = getTableRef(tableName).delete();
+    
+    // If county filter is active and applicable to this dataset
+    if (selectedCounty && (datasetKey === 'zoning' || datasetKey === 'parking')) {
+      deleteQuery = deleteQuery.eq('county', selectedCounty);
+    } else {
+      deleteQuery = deleteQuery.neq('id', '00000000-0000-0000-0000-000000000000');
+    }
+    
+    const { error: deleteError } = await deleteQuery;
     
     if (deleteError) {
       console.error(`Error deleting existing records: ${deleteError.message}`);
@@ -471,6 +509,11 @@ const Dashboard = () => {
     // Add id for tracking
     emptyRow.id = `new-${Date.now()}`;
     
+    // Add county if selected and applicable
+    if (selectedCounty && (datasetKey === 'zoning' || datasetKey === 'parking')) {
+      emptyRow.county = selectedCounty;
+    }
+    
     // Add to dataset
     setDatasets(prev => ({
       ...prev,
@@ -572,6 +615,11 @@ const Dashboard = () => {
       });
     });
   };
+
+  // Handle county selection change
+  const handleCountyChange = (value: string) => {
+    setSelectedCounty(value);
+  };
   
   return (
     <div className="container mx-auto py-8 px-4">
@@ -614,6 +662,44 @@ const Dashboard = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-6">
+            <Label htmlFor="county-filter" className="mb-2 block">County Filter</Label>
+            <div className="flex gap-2">
+              <Select
+                value={selectedCounty}
+                onValueChange={handleCountyChange}
+              >
+                <SelectTrigger id="county-filter" className="w-[300px] flex items-center">
+                  <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
+                  <SelectValue placeholder="Select county to filter data" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All Counties</SelectItem>
+                  {counties.map((county) => (
+                    <SelectItem key={county.id} value={county.id}>
+                      {county.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              {selectedCounty && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setSelectedCounty('')}
+                  className="flex items-center gap-1"
+                >
+                  <X className="w-4 h-4" /> Clear Filter
+                </Button>
+              )}
+            </div>
+            
+            <p className="text-sm text-muted-foreground mt-2">
+              {selectedCounty ? `Showing data for ${counties.find(c => c.id === selectedCounty)?.name || selectedCounty}` : 'Showing data for all counties'}
+            </p>
+          </div>
+          
           {debugMode && (
             <Alert className="mb-6 bg-blue-50 border-blue-200">
               <AlertTitle className="text-blue-800 flex items-center gap-2">
@@ -862,6 +948,8 @@ const Dashboard = () => {
                                     column.accessorKey, 
                                     e.target.value
                                   )}
+                                  // Make county read-only if county filter is active
+                                  readOnly={column.accessorKey === 'county' && !!selectedCounty}
                                 />
                               </TableCell>
                             ))}

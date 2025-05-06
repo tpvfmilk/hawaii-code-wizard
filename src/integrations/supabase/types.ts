@@ -116,7 +116,6 @@ export type Database = {
       }
       zoning_standards: {
         Row: {
-          ada_stalls_required: string | null
           county: string
           created_at: string | null
           front_setback: string | null
@@ -124,14 +123,12 @@ export type Database = {
           max_far: string | null
           max_height: string | null
           max_lot_coverage: string | null
-          parking_required: string | null
           rear_setback: string | null
           side_setback: string | null
           updated_at: string | null
           zoning_district: string
         }
         Insert: {
-          ada_stalls_required?: string | null
           county: string
           created_at?: string | null
           front_setback?: string | null
@@ -139,14 +136,12 @@ export type Database = {
           max_far?: string | null
           max_height?: string | null
           max_lot_coverage?: string | null
-          parking_required?: string | null
           rear_setback?: string | null
           side_setback?: string | null
           updated_at?: string | null
           zoning_district: string
         }
         Update: {
-          ada_stalls_required?: string | null
           county?: string
           created_at?: string | null
           front_setback?: string | null
@@ -154,7 +149,6 @@ export type Database = {
           max_far?: string | null
           max_height?: string | null
           max_lot_coverage?: string | null
-          parking_required?: string | null
           rear_setback?: string | null
           side_setback?: string | null
           updated_at?: string | null

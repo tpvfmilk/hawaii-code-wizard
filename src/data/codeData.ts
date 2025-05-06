@@ -34,23 +34,60 @@ export const zoningDistricts: ZoningDistrict[] = [
   { id: "mg", name: "MG General Industrial", jurisdiction: "hawaii_county" }
 ];
 
+export const counties = [
+  { id: "honolulu", name: "City and County of Honolulu" },
+  { id: "hawaii", name: "Hawaiʻi County" },
+  { id: "maui", name: "Maui County" },
+  { id: "kauai", name: "Kauaʻi County" }
+];
+
 export const occupancyGroups = [
-  { id: "a1", name: "A-1: Assembly (Fixed Seating)" },
-  { id: "a2", name: "A-2: Assembly (Food & Drink)" },
+  // Assembly (Group A)
+  { id: "a1", name: "A-1: Assembly (Fixed Seating, Theaters)" },
+  { id: "a2", name: "A-2: Assembly (Food & Drink Consumption)" },
   { id: "a3", name: "A-3: Assembly (Worship, Recreation)" },
-  { id: "b", name: "B: Business" },
-  { id: "e", name: "E: Educational" },
+  { id: "a4", name: "A-4: Assembly (Indoor Sporting Events)" },
+  { id: "a5", name: "A-5: Assembly (Outdoor Sporting Events)" },
+  
+  // Business (Group B)
+  { id: "b", name: "B: Business (Offices, Banks, Clinics)" },
+  
+  // Educational (Group E)
+  { id: "e1", name: "E-1: Educational (Children Under 2.5 Years)" },
+  { id: "e2", name: "E-2: Educational (Children Over 2.5 Years)" },
+  
+  // Factory and Industrial (Group F)
   { id: "f1", name: "F-1: Factory (Moderate Hazard)" },
   { id: "f2", name: "F-2: Factory (Low Hazard)" },
-  { id: "h", name: "H: High Hazard" },
-  { id: "i", name: "I: Institutional" },
-  { id: "m", name: "M: Mercantile" },
+  
+  // High Hazard (Group H)
+  { id: "h1", name: "H-1: High Hazard (Explosives)" },
+  { id: "h2", name: "H-2: High Hazard (Combustible/Toxic Materials)" },
+  { id: "h3", name: "H-3: High Hazard (Physical Hazards)" },
+  { id: "h4", name: "H-4: High Hazard (Health Hazards)" },
+  { id: "h5", name: "H-5: High Hazard (Semiconductor Fabrication)" },
+  
+  // Institutional (Group I)
+  { id: "i1", name: "I-1: Institutional (Residential Care)" },
+  { id: "i2", name: "I-2: Institutional (Medical Care)" },
+  { id: "i3", name: "I-3: Institutional (Detention Facilities)" },
+  { id: "i4", name: "I-4: Institutional (Day Care)" },
+  
+  // Mercantile (Group M)
+  { id: "m", name: "M: Mercantile (Retail, Department Stores)" },
+  
+  // Residential (Group R)
   { id: "r1", name: "R-1: Residential (Transient)" },
   { id: "r2", name: "R-2: Residential (Permanent, 3+ Units)" },
   { id: "r3", name: "R-3: Residential (1-2 Units)" },
+  { id: "r4", name: "R-4: Residential (Small Dormitories)" },
+  
+  // Storage (Group S)
   { id: "s1", name: "S-1: Storage (Moderate Hazard)" },
   { id: "s2", name: "S-2: Storage (Low Hazard)" },
-  { id: "u", name: "U: Utility" },
+  
+  // Utility (Group U)
+  { id: "u", name: "U: Utility & Miscellaneous" },
 ];
 
 export const constructionTypes = [
@@ -97,6 +134,11 @@ export const requiredDatasets = {
     name: "IBC Fire Rating Tables",
     requiredColumns: ["ConstructionType", "ExteriorWalls", "StructuralFrame", "BearingWalls", "FloorConstruction", "RoofConstruction"],
     prompt: "Fire resistance ratings unavailable. Upload CSVs for Tables 602, 705.8, or 713.4."
+  },
+  parkingRequirements: {
+    name: "Parking Requirements",
+    requiredColumns: ["County", "UseType", "ParkingRatio"],
+    prompt: "Parking requirements unavailable. Please upload CSV with parking ratios by use type."
   }
 };
 

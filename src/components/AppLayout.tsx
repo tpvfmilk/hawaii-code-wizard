@@ -23,6 +23,7 @@ const AppLayout = () => {
     projectData: {},
     zoningData: {},
     occupancyData: {},
+    parkingData: {},
     lifeSafetyData: {},
     fireData: {}
   });

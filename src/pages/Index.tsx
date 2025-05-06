@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import ProjectSetupStep from "@/components/ProjectSetupStep";
 import ZoningInfoStep from "@/components/ZoningInfoStep";
 import OccupancyConstruction from "@/components/OccupancyConstruction";
+import ParkingCalculationStep from "@/components/ParkingCalculationStep";
 import LifeSafetyStep from "@/components/LifeSafetyStep";
 import FireRatingsStep from "@/components/FireRatingsStep";
 import SummaryStep from "@/components/SummaryStep";
@@ -16,7 +18,7 @@ const Index = () => {
   const { currentProject, updateProjectData } = useProject();
   
   const [currentStep, setCurrentStep] = useState(0);
-  const [stepCompletion, setStepCompletion] = useState<boolean[]>([false, false, false, false, false, false]);
+  const [stepCompletion, setStepCompletion] = useState<boolean[]>([false, false, false, false, false, false, false]);
   const [datasets, setDatasets] = useState<{
     [key: string]: any[];
   }>({});
@@ -59,6 +61,14 @@ const Index = () => {
     sprinklered: false
   });
 
+  // Parking data state
+  const [parkingData, setParkingData] = useState({
+    occupancyType: "",
+    buildingArea: "",
+    calculatedSpaces: 0,
+    manualOverride: ""
+  });
+
   // Life safety data state
   const [lifeSafetyData, setLifeSafetyData] = useState({
     occupantLoad: "",
@@ -80,7 +90,7 @@ const Index = () => {
     doorWindowRatings: ""
   });
   
-  const steps = ["Project Setup", "Zoning & Site", "Occupancy & Construction", "Life Safety / Egress", "Fire Ratings", "Summary"];
+  const steps = ["Project Setup", "Zoning & Site", "Occupancy & Construction", "Parking Calculation", "Life Safety / Egress", "Fire Ratings", "Summary"];
 
   // Handle project data changes
   const handleProjectDataChange = (field: string, value: string | boolean) => {
@@ -118,6 +128,18 @@ const Index = () => {
     });
   };
 
+  // Handle parking data changes
+  const handleParkingDataChange = (field: string, value: any) => {
+    setParkingData(prev => {
+      const newData = {
+        ...prev,
+        [field]: value
+      };
+      updateProjectData("parkingData", newData);
+      return newData;
+    });
+  };
+
   // Handle life safety data changes
   const handleLifeSafetyDataChange = (field: string, value: string) => {
     setLifeSafetyData(prev => {
@@ -145,11 +167,12 @@ const Index = () => {
   // Load project data from context if available
   useEffect(() => {
     if (currentProject?.project_data) {
-      const { projectData: pd, zoningData: zd, occupancyData: od, lifeSafetyData: lsd, fireData: fd } = currentProject.project_data;
+      const { projectData: pd, zoningData: zd, occupancyData: od, parkingData: pkd, lifeSafetyData: lsd, fireData: fd } = currentProject.project_data;
       
       if (pd) setProjectData(prev => ({ ...prev, ...pd }));
       if (zd) setZoningData(prev => ({ ...prev, ...zd }));
       if (od) setOccupancyData(prev => ({ ...prev, ...od }));
+      if (pkd) setParkingData(prev => ({ ...prev, ...pkd }));
       if (lsd) setLifeSafetyData(prev => ({ ...prev, ...lsd }));
       if (fd) setFireData(prev => ({ ...prev, ...fd }));
       
@@ -189,21 +212,24 @@ const Index = () => {
     // Step 3: Occupancy & Construction
     newCompletionStatus[2] = !!occupancyData.primaryOccupancy && !!occupancyData.constructionType && !!occupancyData.stories && !!occupancyData.buildingHeight && !!occupancyData.buildingArea;
 
-    // Step 4: Life Safety / Egress
-    newCompletionStatus[3] = !!lifeSafetyData.occupantLoad && !!lifeSafetyData.exitsRequired;
+    // Step 4: Parking Calculation
+    newCompletionStatus[3] = true; // Always complete since it's calculated based on previous steps
 
-    // Step 5: Fire Ratings
-    newCompletionStatus[4] = !!fireData.fireSeparationDistance;
+    // Step 5: Life Safety / Egress
+    newCompletionStatus[4] = !!lifeSafetyData.occupantLoad && !!lifeSafetyData.exitsRequired;
 
-    // Step 6: Summary is always complete
-    newCompletionStatus[5] = true;
+    // Step 6: Fire Ratings
+    newCompletionStatus[5] = !!fireData.fireSeparationDistance;
+
+    // Step 7: Summary is always complete
+    newCompletionStatus[6] = true;
     setStepCompletion(newCompletionStatus);
   };
 
   // Check step completion whenever data changes
   useEffect(() => {
     checkStepCompletion();
-  }, [projectData, zoningData, occupancyData, lifeSafetyData, fireData]);
+  }, [projectData, zoningData, occupancyData, parkingData, lifeSafetyData, fireData]);
 
   // Navigate to next step
   const goToNextStep = () => {
@@ -268,14 +294,23 @@ const Index = () => {
             
             {currentStep === 2 && <OccupancyConstruction occupancyData={occupancyData} onOccupancyDataChange={handleOccupancyDataChange} onDatasetUploaded={handleDatasetUploaded} />}
             
-            {currentStep === 3 && <LifeSafetyStep lifeSafetyData={lifeSafetyData} onLifeSafetyDataChange={handleLifeSafetyDataChange} onDatasetUploaded={handleDatasetUploaded} occupancyData={{
+            {currentStep === 3 && <ParkingCalculationStep 
+              parkingData={parkingData} 
+              onParkingDataChange={handleParkingDataChange}
+              occupancyData={{
+                primaryOccupancy: occupancyData.primaryOccupancy,
+                buildingArea: occupancyData.buildingArea
+              }}
+            />}
+            
+            {currentStep === 4 && <LifeSafetyStep lifeSafetyData={lifeSafetyData} onLifeSafetyDataChange={handleLifeSafetyDataChange} onDatasetUploaded={handleDatasetUploaded} occupancyData={{
             primaryOccupancy: occupancyData.primaryOccupancy,
             buildingArea: occupancyData.buildingArea
           }} />}
             
-            {currentStep === 4 && <FireRatingsStep fireData={fireData} onFireDataChange={handleFireDataChange} onDatasetUploaded={handleDatasetUploaded} constructionType={occupancyData.constructionType} />}
+            {currentStep === 5 && <FireRatingsStep fireData={fireData} onFireDataChange={handleFireDataChange} onDatasetUploaded={handleDatasetUploaded} constructionType={occupancyData.constructionType} />}
             
-            {currentStep === 5 && <SummaryStep projectData={projectData} zoningData={zoningData} occupancyData={occupancyData} lifeSafetyData={lifeSafetyData} fireData={fireData} />}
+            {currentStep === 6 && <SummaryStep projectData={projectData} zoningData={zoningData} occupancyData={occupancyData} parkingData={parkingData} lifeSafetyData={lifeSafetyData} fireData={fireData} />}
             
             <div className="mt-10">
               <WizardNav steps={steps} currentStep={currentStep} onNext={goToNextStep} onPrevious={goToPreviousStep} onStepClick={goToStep} isStepComplete={isStepComplete} />
