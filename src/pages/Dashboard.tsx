@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useProject } from '@/hooks/use-project';
 import { Link } from "react-router-dom";
@@ -72,19 +71,21 @@ const HAWAII_COUNTIES = [
 // Define proper types for our dataset
 type DatasetStatus = "missing" | "loaded" | "uploading";
 
-// Define basic row data type with explicit indexable signature
-interface RowData {
-  [key: string]: any;
-  id?: string | number;
-  index?: number;
-}
+// Use a simplistic type for cell rendering function with no circular dependencies
+type CellRenderFunction = (info: { [key: string]: any }) => React.ReactNode;
 
-// Define column configuration type explicitly to break recursive dependency
+// Define column configuration type with the simplified cell renderer
 interface ColumnConfig {
   header: string;
   accessorKey: string;
-  cell?: (info: { [key: string]: any; index?: number }) => React.ReactNode;
+  cell?: CellRenderFunction;
 }
+
+// Generic row data type
+type RowData = {
+  [key: string]: any;
+  id?: string | number;
+};
 
 interface DatasetInfo {
   name: string;
@@ -92,7 +93,7 @@ interface DatasetInfo {
   status: DatasetStatus;
   lastUpdated: string | null;
   notes: string;
-  data: any[] | null;
+  data: RowData[] | null;
 }
 
 // Create strongly typed datasets record
@@ -194,11 +195,11 @@ const Dashboard = () => {
       { 
         header: "Actions", 
         accessorKey: "actions",
-        cell: (rowData) => (
+        cell: (info) => (
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={() => handleDeleteRow(activeTab, rowData.index ?? 0)}
+            onClick={() => handleDeleteRow(activeTab, info.index ?? 0)}
             title="Delete row"
           >
             <Trash2 className="h-4 w-4" />
@@ -213,11 +214,11 @@ const Dashboard = () => {
       { 
         header: "Actions", 
         accessorKey: "actions",
-        cell: (rowData) => (
+        cell: (info) => (
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={() => handleDeleteRow(activeTab, rowData.index ?? 0)}
+            onClick={() => handleDeleteRow(activeTab, info.index ?? 0)}
             title="Delete row"
           >
             <Trash2 className="h-4 w-4" />
@@ -231,11 +232,11 @@ const Dashboard = () => {
       { 
         header: "Actions", 
         accessorKey: "actions",
-        cell: (rowData) => (
+        cell: (info) => (
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={() => handleDeleteRow(activeTab, rowData.index ?? 0)}
+            onClick={() => handleDeleteRow(activeTab, info.index ?? 0)}
             title="Delete row"
           >
             <Trash2 className="h-4 w-4" />
@@ -317,7 +318,8 @@ const Dashboard = () => {
               .eq('project_id', currentProject.id);
               
             if (data && data.length > 0) {
-              updatedDatasets[key].data = data;
+              // Add index to each row for easier reference
+              updatedDatasets[key].data = data.map((row, index) => ({ ...row, index }));
               updatedDatasets[key].status = 'loaded';
             } else {
               updatedDatasets[key].data = null;
@@ -897,7 +899,7 @@ const Dashboard = () => {
     
     const searchTerm = filters[datasetKey].toLowerCase();
     
-    if (!searchTerm) return datasets[datasetKey].data;
+    if (!searchTerm) return datasets[datasetKey].data.map((row, i) => ({...row, index: i}));
     
     return datasets[datasetKey].data!.filter(row => {
       return Object.entries(row).some(([key, value]) => {
@@ -906,7 +908,7 @@ const Dashboard = () => {
         }
         return false;
       });
-    });
+    }).map((row, i) => ({...row, index: i}));
   };
   
   // Handle county change
