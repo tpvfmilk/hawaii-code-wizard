@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { useProject } from '@/hooks/use-project';
 import { Link } from "react-router-dom";
@@ -71,21 +72,22 @@ const HAWAII_COUNTIES = [
 // Define proper types for our dataset
 type DatasetStatus = "missing" | "loaded" | "uploading";
 
-// Use a simplistic type for cell rendering function with no circular dependencies
-type CellRenderFunction = (info: { [key: string]: any }) => React.ReactNode;
+// Generic row data type that includes index for direct referencing
+interface RowData {
+  [key: string]: any;
+  id?: string | number;
+  index?: number;
+}
 
-// Define column configuration type with the simplified cell renderer
+// Define cell render function without circular references
+type CellRenderFn = (info: RowData) => React.ReactNode;
+
+// Define column configuration type with non-circular reference
 interface ColumnConfig {
   header: string;
   accessorKey: string;
-  cell?: CellRenderFunction;
+  cell?: CellRenderFn;
 }
-
-// Generic row data type
-type RowData = {
-  [key: string]: any;
-  id?: string | number;
-};
 
 interface DatasetInfo {
   name: string;
@@ -717,7 +719,7 @@ const Dashboard = () => {
           
           const { error } = await getTableRef(tableName)
             .delete()
-            .eq('id', rowId);
+            .eq('id', rowId.toString());
             
           if (error) throw error;
         }
