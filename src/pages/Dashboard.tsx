@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { useProject } from '@/hooks/use-project';
 import { Link } from "react-router-dom";
@@ -129,8 +130,8 @@ const Dashboard = () => {
     }
   });
   
-  // Active tab state
-  const [activeTab, setActiveTab] = useState("zoning");
+  // Active tab state - make this typed to match dataset keys
+  const [activeTab, setActiveTab] = useState<keyof DatasetsState>("zoning");
   
   // Selected county state
   const [selectedCounty, setSelectedCounty] = useState<string>("honolulu");
@@ -167,7 +168,7 @@ const Dashboard = () => {
   }, [currentProject, selectedCounty]);
   
   // Column configurations for each dataset
-  const columnConfigs: Record<string, ColumnConfig[]> = {
+  const columnConfigs: Record<keyof DatasetsState, ColumnConfig[]> = {
     zoning: [
       { header: "County", accessorKey: "county" },
       { header: "Zoning District", accessorKey: "zoning_district" },
@@ -278,9 +279,9 @@ const Dashboard = () => {
               ? 'parking' 
               : 'ada';
               
-          if (updatedDatasets[datasetKey]) {
-            updatedDatasets[datasetKey] = {
-              ...updatedDatasets[datasetKey],
+          if (updatedDatasets[datasetKey as keyof DatasetsState]) {
+            updatedDatasets[datasetKey as keyof DatasetsState] = {
+              ...updatedDatasets[datasetKey as keyof DatasetsState],
               status: 'loaded',
               lastUpdated: record.last_updated,
               notes: record.notes || ''
@@ -289,8 +290,8 @@ const Dashboard = () => {
         });
         
         // Fetch actual data for each dataset
-        for (const key of Object.keys(updatedDatasets)) {
-          const tableMap: Record<string, TableName> = {
+        for (const key of Object.keys(updatedDatasets) as Array<keyof DatasetsState>) {
+          const tableMap: Record<keyof DatasetsState, TableName> = {
             zoning: 'zoning_standards',
             parking: 'parking_requirements',
             ada: 'ada_requirements'
@@ -371,7 +372,7 @@ const Dashboard = () => {
       // Normalize CSV columns to match database schema
       const normalizedData = normalizeCSVColumns(
         parsedCSV.data, 
-        datasetKey as 'zoning' | 'parking' | 'ada'
+        datasetKey
       );
       
       // Log transformation for debugging
@@ -438,8 +439,8 @@ const Dashboard = () => {
   };
   
   // Validate required columns for each dataset
-  const validateColumns = (headers: Record<string, any>, datasetKey: string) => {
-    const requiredColumns: Record<string, string[]> = {
+  const validateColumns = (headers: Record<string, any>, datasetKey: keyof DatasetsState) => {
+    const requiredColumns: Record<keyof DatasetsState, string[]> = {
       zoning: ['county', 'zoning_district', 'front_setback', 'side_setback', 'rear_setback'],
       parking: ['county', 'use_type', 'parking_requirement'],
       ada: ['total_parking_spaces_provided', 'minimum_required_ada_stalls']
@@ -460,7 +461,7 @@ const Dashboard = () => {
       throw new Error("No active project");
     }
     
-    const tableMap: Record<string, TableName> = {
+    const tableMap: Record<keyof DatasetsState, TableName> = {
       zoning: 'zoning_standards',
       parking: 'parking_requirements',
       ada: 'ada_requirements'
@@ -689,7 +690,7 @@ const Dashboard = () => {
       try {
         // Delete from database if it's a database record (not newly added)
         if (!rowId.toString().startsWith('new-')) {
-          const tableMap: Record<string, TableName> = {
+          const tableMap: Record<keyof DatasetsState, TableName> = {
             zoning: 'zoning_standards',
             parking: 'parking_requirements',
             ada: 'ada_requirements'
@@ -755,7 +756,7 @@ const Dashboard = () => {
       setIsLoading(true);
       
       try {
-        const tableMap: Record<string, TableName> = {
+        const tableMap: Record<keyof DatasetsState, TableName> = {
           zoning: 'zoning_standards',
           parking: 'parking_requirements',
           ada: 'ada_requirements'
@@ -1024,7 +1025,7 @@ const Dashboard = () => {
                   ref={zoningInputRef}
                   type="file" 
                   accept=".csv"
-                  onChange={(e) => handleFileUpload(e, 'zoning')}
+                  onChange={(e) => handleFileUpload(e, "zoning")}
                 />
                 {datasets.zoning.status === 'loaded' && (
                   <Badge className="bg-green-500">
@@ -1054,7 +1055,7 @@ const Dashboard = () => {
                   ref={parkingInputRef}
                   type="file" 
                   accept=".csv"
-                  onChange={(e) => handleFileUpload(e, 'parking')}
+                  onChange={(e) => handleFileUpload(e, "parking")}
                 />
                 {datasets.parking.status === 'loaded' && (
                   <Badge className="bg-green-500">
@@ -1084,7 +1085,7 @@ const Dashboard = () => {
                   ref={adaInputRef}
                   type="file" 
                   accept=".csv"
-                  onChange={(e) => handleFileUpload(e, 'ada')}
+                  onChange={(e) => handleFileUpload(e, "ada")}
                 />
                 {datasets.ada.status === 'loaded' && (
                   <Badge className="bg-green-500">
@@ -1146,22 +1147,22 @@ const Dashboard = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as keyof DatasetsState)} className="w-full">
             <TabsList className="grid w-full grid-cols-3 mb-8">
               <TabsTrigger value="zoning">Zoning Standards</TabsTrigger>
               <TabsTrigger value="parking">Parking Requirements</TabsTrigger>
               <TabsTrigger value="ada">ADA Requirements</TabsTrigger>
             </TabsList>
             
-            {['zoning', 'parking', 'ada'].map(datasetKey => (
+            {(["zoning", "parking", "ada"] as Array<keyof DatasetsState>).map((datasetKey) => (
               <TabsContent key={datasetKey} value={datasetKey} className="space-y-6">
                 {/* Dataset Info and Controls */}
                 <div className="flex flex-col md:flex-row justify-between mb-6 gap-4">
                   <div className="space-y-2">
-                    <h3 className="text-lg font-medium">{datasets[datasetKey as keyof typeof datasets].name}</h3>
-                    {datasets[datasetKey as keyof typeof datasets].lastUpdated && (
+                    <h3 className="text-lg font-medium">{datasets[datasetKey].name}</h3>
+                    {datasets[datasetKey].lastUpdated && (
                       <p className="text-sm text-gray-500">
-                        Last updated: {new Date(datasets[datasetKey as keyof typeof datasets].lastUpdated as string).toLocaleString()}
+                        Last updated: {new Date(datasets[datasetKey].lastUpdated as string).toLocaleString()}
                       </p>
                     )}
                   </div>
@@ -1177,7 +1178,7 @@ const Dashboard = () => {
                       onClick={() => handleDownloadCSV(datasetKey)} 
                       variant="outline" 
                       size="sm"
-                      disabled={!datasets[datasetKey as keyof typeof datasets].data}
+                      disabled={!datasets[datasetKey].data}
                       className="flex items-center gap-1"
                     >
                       <Download className="w-4 h-4" /> Download CSV
@@ -1186,7 +1187,7 @@ const Dashboard = () => {
                       onClick={() => handleClearTable(datasetKey)} 
                       variant="destructive" 
                       size="sm"
-                      disabled={!datasets[datasetKey as keyof typeof datasets].data}
+                      disabled={!datasets[datasetKey].data}
                       className="flex items-center gap-1"
                     >
                       <Trash2 className="w-4 h-4" /> Clear Table
@@ -1199,14 +1200,14 @@ const Dashboard = () => {
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
                   <Input
                     placeholder="Search data..."
-                    value={filters[datasetKey as keyof typeof filters]}
+                    value={filters[datasetKey]}
                     onChange={(e) => setFilters(prev => ({...prev, [datasetKey]: e.target.value}))}
                     className="pl-9"
                   />
                 </div>
                 
                 {/* Data Table */}
-                {datasets[datasetKey as keyof typeof datasets].data ? (
+                {datasets[datasetKey].data ? (
                   <div className="overflow-x-auto border rounded-md">
                     <Table>
                       <TableHeader>
@@ -1253,7 +1254,7 @@ const Dashboard = () => {
                   <Textarea
                     id={`${datasetKey}-notes`}
                     placeholder="Add notes about this dataset..."
-                    value={datasets[datasetKey as keyof typeof datasets].notes}
+                    value={datasets[datasetKey].notes}
                     onChange={(e) => handleNotesChange(datasetKey, e.target.value)}
                     className="min-h-[100px]"
                   />
