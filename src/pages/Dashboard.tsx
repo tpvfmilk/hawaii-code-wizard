@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { useProject } from '@/hooks/use-project';
 import { Link } from "react-router-dom";
@@ -71,10 +72,18 @@ const HAWAII_COUNTIES = [
 // Define proper types for our dataset
 type DatasetStatus = "missing" | "loaded" | "uploading";
 
-// Define row data type to avoid recursive type references
+// Define basic row data type with explicit indexable signature
 interface RowData {
   [key: string]: any;
+  id?: string | number;
   index?: number;
+}
+
+// Define column configuration type explicitly to break recursive dependency
+interface ColumnConfig {
+  header: string;
+  accessorKey: string;
+  cell?: (info: { [key: string]: any; index?: number }) => React.ReactNode;
 }
 
 interface DatasetInfo {
@@ -91,13 +100,6 @@ interface DatasetsState {
   zoning: DatasetInfo;
   parking: DatasetInfo;
   ada: DatasetInfo;
-}
-
-// Define column configuration type explicitly, breaking the recursive dependency
-interface ColumnConfig {
-  header: string;
-  accessorKey: string;
-  cell?: (info: RowData) => React.ReactNode;
 }
 
 const Dashboard = () => {
@@ -192,11 +194,11 @@ const Dashboard = () => {
       { 
         header: "Actions", 
         accessorKey: "actions",
-        cell: (rowData: RowData) => (
+        cell: (rowData) => (
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={() => handleDeleteRow(activeTab, rowData.index || 0)}
+            onClick={() => handleDeleteRow(activeTab, rowData.index ?? 0)}
             title="Delete row"
           >
             <Trash2 className="h-4 w-4" />
@@ -211,11 +213,11 @@ const Dashboard = () => {
       { 
         header: "Actions", 
         accessorKey: "actions",
-        cell: (rowData: RowData) => (
+        cell: (rowData) => (
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={() => handleDeleteRow(activeTab, rowData.index || 0)}
+            onClick={() => handleDeleteRow(activeTab, rowData.index ?? 0)}
             title="Delete row"
           >
             <Trash2 className="h-4 w-4" />
@@ -229,11 +231,11 @@ const Dashboard = () => {
       { 
         header: "Actions", 
         accessorKey: "actions",
-        cell: (rowData: RowData) => (
+        cell: (rowData) => (
           <Button 
             variant="ghost" 
             size="icon"
-            onClick={() => handleDeleteRow(activeTab, rowData.index || 0)}
+            onClick={() => handleDeleteRow(activeTab, rowData.index ?? 0)}
             title="Delete row"
           >
             <Trash2 className="h-4 w-4" />
