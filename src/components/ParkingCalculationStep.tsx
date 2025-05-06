@@ -14,7 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { InfoCircle } from "lucide-react";
+import { Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface ParkingCalculationStepProps {
@@ -173,7 +173,7 @@ const ParkingCalculationStep: React.FC<ParkingCalculationStepProps> = ({
               </div>
               
               <Alert>
-                <InfoCircle className="h-4 w-4" />
+                <Info className="h-4 w-4" />
                 <AlertTitle>Parking Note</AlertTitle>
                 <AlertDescription>
                   Use manual override to account for special conditions, mixed-use reductions, or local code modifications.
