@@ -1,4 +1,3 @@
-
 export const jurisdictions = [
   { id: "honolulu", name: "Honolulu" },
   { id: "hawaii_county", name: "Hawaiʻi County" }
@@ -14,25 +13,6 @@ export interface ZoningDistrict {
   name: string;
   jurisdiction: string;
 }
-
-export const zoningDistricts: ZoningDistrict[] = [
-  // Honolulu districts
-  { id: "r-3.5", name: "R-3.5 Residential", jurisdiction: "honolulu" },
-  { id: "r-5", name: "R-5 Residential", jurisdiction: "honolulu" },
-  { id: "r-7.5", name: "R-7.5 Residential", jurisdiction: "honolulu" },
-  { id: "r-10", name: "R-10 Residential", jurisdiction: "honolulu" },
-  { id: "amt", name: "AMX-1 Apartment Mixed Use", jurisdiction: "honolulu" },
-  { id: "bmd-3", name: "BMX-3 Community Business Mixed Use", jurisdiction: "honolulu" },
-  { id: "bmd-4", name: "BMX-4 Central Business Mixed Use", jurisdiction: "honolulu" },
-  
-  // Hawaii County districts
-  { id: "rs", name: "RS Residential", jurisdiction: "hawaii_county" },
-  { id: "rm", name: "RM Multiple-Family Residential", jurisdiction: "hawaii_county" },
-  { id: "cv", name: "CV Village Commercial", jurisdiction: "hawaii_county" },
-  { id: "cg", name: "CG General Commercial", jurisdiction: "hawaii_county" },
-  { id: "ml", name: "ML Limited Industrial", jurisdiction: "hawaii_county" },
-  { id: "mg", name: "MG General Industrial", jurisdiction: "hawaii_county" }
-];
 
 export const occupancyGroups = [
   { id: "a1", name: "A-1: Assembly (Fixed Seating)" },

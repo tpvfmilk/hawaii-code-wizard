@@ -16,12 +16,13 @@ export const findZoningMatch = (dataset: any[], jurisdiction: string, districtId
   
   // Create a normalized version of the district ID (lowercase, replace spaces with underscores)
   const normalizedDistrictId = districtId.toLowerCase().replace(/\s+/g, '_');
+  const districtLowerCase = districtId.toLowerCase();
   
   // First, try an exact match on zoning_district (case insensitive)
   const exactMatch = dataset.find(item => 
     item.county === jurisdiction && 
     (item.zoning_district === districtId || 
-     item.zoning_district.toLowerCase() === districtId.toLowerCase() ||
+     item.zoning_district.toLowerCase() === districtLowerCase ||
      item.zoning_district.toLowerCase().replace(/\s+/g, '_') === normalizedDistrictId)
   );
   
@@ -33,8 +34,8 @@ export const findZoningMatch = (dataset: any[], jurisdiction: string, districtId
   // If no exact match, try partial match (contains)
   const partialMatch = dataset.find(item => 
     item.county === jurisdiction && 
-    (item.zoning_district.toLowerCase().includes(districtId.toLowerCase()) || 
-     districtId.toLowerCase().includes(item.zoning_district.toLowerCase()))
+    (item.zoning_district.toLowerCase().includes(districtLowerCase) || 
+     districtLowerCase.includes(item.zoning_district.toLowerCase()))
   );
   
   if (partialMatch) {
@@ -45,7 +46,7 @@ export const findZoningMatch = (dataset: any[], jurisdiction: string, districtId
   // Try matching the beginning of the name
   const beginningMatch = dataset.find(item => 
     item.county === jurisdiction && 
-    item.zoning_district.toLowerCase().startsWith(districtId.toLowerCase())
+    item.zoning_district.toLowerCase().startsWith(districtLowerCase)
   );
   
   if (beginningMatch) {
@@ -68,6 +69,20 @@ export const findZoningMatch = (dataset: any[], jurisdiction: string, districtId
     return firstWordMatch;
   }
   
+  // For district IDs that might be normalized, try to match them against the original strings
+  const denormalizedMatch = dataset.find(item => {
+    if (item.county !== jurisdiction) return false;
+    
+    // See if the district ID might be a normalized version of this item's district
+    const itemNormalized = item.zoning_district.toLowerCase().replace(/\s+/g, '_');
+    return itemNormalized === districtLowerCase || itemNormalized === normalizedDistrictId;
+  });
+  
+  if (denormalizedMatch) {
+    console.log("Found denormalized match:", denormalizedMatch);
+    return denormalizedMatch;
+  }
+  
   // If all else fails, return null
   console.log("No zoning match found");
   return null;
@@ -80,7 +95,8 @@ export const findZoningMatchWithDebug = (dataset: any[], jurisdiction: string, d
   const debugInfo = {
     searchParameters: {
       jurisdiction,
-      districtId
+      districtId,
+      normalizedDistrictId: districtId ? districtId.toLowerCase().replace(/\s+/g, '_') : ""
     },
     jurisdictionCheck: {
       datasetValues: Array.from(new Set(dataset.map(item => item.county)))
