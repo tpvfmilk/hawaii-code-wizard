@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { useProject } from '@/hooks/use-project';
 import { Link } from "react-router-dom";
@@ -53,6 +52,7 @@ import { counties } from "@/data/codeData";
 // Define literal type for valid table names in our database
 type TableName = 'zoning_standards' | 'parking_requirements' | 'ada_requirements' | 'csv_datasets';
 
+// Define interfaces for each dataset type to avoid recursive types
 interface DatasetInfo {
   name: string;
   type: string;
@@ -62,22 +62,33 @@ interface DatasetInfo {
   data: any[] | null;
 }
 
-// Define a type for datasets to avoid excessive recursion
+// Simple string literal types
 type DatasetKey = 'zoning' | 'parking' | 'ada';
-type DatasetMap = Record<DatasetKey, DatasetInfo>;
-type FilterMap = Record<DatasetKey, string>;
 
-// Define a more specific type for column configurations
+// Simple record types that won't cause recursive definitions
+type DatasetMap = {
+  zoning: DatasetInfo;
+  parking: DatasetInfo;
+  ada: DatasetInfo;
+};
+
+type FilterMap = {
+  zoning: string;
+  parking: string;
+  ada: string;
+};
+
+// Column configuration interface
 interface ColumnConfig {
   header: string;
   accessorKey: string;
 }
 
-// Using a non-recursive type definition for column configurations
+// Define column configurations explicitly without using Record type
 type ColumnConfigMap = {
-  zoning: ColumnConfig[];
-  parking: ColumnConfig[];
-  ada: ColumnConfig[];
+  zoning: Array<ColumnConfig>;
+  parking: Array<ColumnConfig>;
+  ada: Array<ColumnConfig>;
 };
 
 const Dashboard = () => {
