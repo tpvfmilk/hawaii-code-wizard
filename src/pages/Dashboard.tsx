@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { useProject } from '@/hooks/use-project';
 import { Link } from "react-router-dom";
@@ -52,7 +53,7 @@ import { counties } from "@/data/codeData";
 // Define literal type for valid table names in our database
 type TableName = 'zoning_standards' | 'parking_requirements' | 'ada_requirements' | 'csv_datasets';
 
-// Define interfaces for each dataset type to avoid recursive types
+// Define interfaces and types without any recursive references
 interface DatasetInfo {
   name: string;
   type: string;
@@ -62,21 +63,27 @@ interface DatasetInfo {
   data: any[] | null;
 }
 
-// Simple string literal types
+// Define dataset keys as string literals
 type DatasetKey = 'zoning' | 'parking' | 'ada';
 
-// Simple record types that won't cause recursive definitions
-type DatasetMap = {
-  zoning: DatasetInfo;
-  parking: DatasetInfo;
-  ada: DatasetInfo;
-};
+// Define non-recursive object types with explicit properties
+interface ZoningDataset extends DatasetInfo {}
+interface ParkingDataset extends DatasetInfo {}
+interface AdaDataset extends DatasetInfo {}
 
-type FilterMap = {
+// Define the dataset map with specific types for each key
+interface DatasetMap {
+  zoning: ZoningDataset;
+  parking: ParkingDataset;
+  ada: AdaDataset;
+}
+
+// Define filter map explicitly
+interface FilterMap {
   zoning: string;
   parking: string;
   ada: string;
-};
+}
 
 // Column configuration interface
 interface ColumnConfig {
@@ -84,12 +91,12 @@ interface ColumnConfig {
   accessorKey: string;
 }
 
-// Define column configurations explicitly without using Record type
-type ColumnConfigMap = {
-  zoning: Array<ColumnConfig>;
-  parking: Array<ColumnConfig>;
-  ada: Array<ColumnConfig>;
-};
+// Explicit column config map without using generics
+interface ColumnConfigMap {
+  zoning: ColumnConfig[];
+  parking: ColumnConfig[];
+  ada: ColumnConfig[];
+}
 
 const Dashboard = () => {
   const { toast } = useToast();
