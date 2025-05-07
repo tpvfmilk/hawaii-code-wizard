@@ -62,17 +62,23 @@ interface DatasetInfo {
   data: any[] | null;
 }
 
+// Define a type for datasets to avoid excessive recursion
+type DatasetKey = 'zoning' | 'parking' | 'ada';
+type DatasetMap = Record<DatasetKey, DatasetInfo>;
+type FilterMap = Record<DatasetKey, string>;
+
 // Define a more specific type for column configurations
 interface ColumnConfig {
   header: string;
   accessorKey: string;
 }
 
-// Define a type for datasets to avoid excessive recursion
-type DatasetKey = 'zoning' | 'parking' | 'ada';
-type DatasetMap = Record<DatasetKey, DatasetInfo>;
-type FilterMap = Record<DatasetKey, string>;
-type ColumnConfigMap = Record<DatasetKey, ColumnConfig[]>;
+// Using a non-recursive type definition for column configurations
+type ColumnConfigMap = {
+  zoning: ColumnConfig[];
+  parking: ColumnConfig[];
+  ada: ColumnConfig[];
+};
 
 const Dashboard = () => {
   const { toast } = useToast();

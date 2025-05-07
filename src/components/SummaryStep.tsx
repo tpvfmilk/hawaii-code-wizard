@@ -18,6 +18,7 @@ interface SummaryStepProps {
   projectData: any;
   zoningData: any;
   occupancyData: any;
+  parkingData: any; // Adding parkingData to the interface
   lifeSafetyData: any;
   fireData: any;
 }
